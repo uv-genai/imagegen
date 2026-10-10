@@ -197,3 +197,21 @@ machines and design decisions.
 - `n > 1` is capped per model; on a small GPU keep it at 1.
 - Video, ControlNet, LoRA and upscaling are reachable through `sd_cpp` and
   `backends.extra_args` but are not modelled in this service's API.
+
+## License
+
+MIT — see [LICENSE](LICENSE). This covers the service code in this repository
+only. Two things it does not cover, and which are fetched separately by the setup
+scripts rather than redistributed here:
+
+- **stable-diffusion.cpp** (`scripts/build_engine.sh`) — MIT, © 2023 leejet.
+- **The Qwen-Image-2.1 weights** (`scripts/fetch_models.sh`) — **not** open source.
+  They are released by Hangzhou Tongyi Laboratory Technology Co., Ltd. under the
+  *Qwen Research License Agreement*, which grants the right to use, reproduce,
+  distribute and modify the weights **for non-commercial purposes only**
+  (research or evaluation). Commercial use requires a separate license from the
+  licensor. Note also that derivative works may not be named "Qwen" as their
+  primary identifier.
+
+MIT covers this repository's code; it does not relicense the weights, and running
+the service with them commercially still requires the Qwen commercial license.
