@@ -79,7 +79,8 @@ uv run imagegen serve --config config/service.toml
 | `IMAGEGEN_HOST`, `IMAGEGEN_PORT` | override the bind address |
 
 With no keys configured the service is unauthenticated and logs a warning — only do
-that on loopback or behind an authenticating proxy.
+that on loopback or behind an authenticating proxy. See
+[Authentication](#authentication) for the full picture.
 
 ## Models
 
@@ -135,6 +136,94 @@ and the pipeline reproduces the input — an instruction like *"change 'BASE MOD
 `strength: 1.0` by default, so sampling starts from noise and is guided by the
 reference image, matching `sd-cli -r`. Pass `strength` (or `sd_cpp.strength`) to get
 img2img behaviour instead.
+
+## Authentication
+
+The key is a **static shared secret that you define**. The service does not issue,
+sign, expire or hash keys — it compares the string you send against the list you
+configured. That is the entire mechanism.
+
+```
+configure:  IMAGEGEN_API_KEYS="sk-demo-111,sk-demo-222"
+                 |
+client:     Authorization: Bearer sk-demo-111
+                 |
+gateway:    is this string in the configured list?  yes -> proceed
+                                                   no  -> 401
+```
+
+### Configuring keys
+
+Highest priority first:
+
+| Source | Notes |
+| --- | --- |
+| `IMAGEGEN_API_KEYS` env var | comma-separated, **overrides** the config file. Preferred: keeps secrets out of git |
+| `service.api_keys` in `config/service.toml` | a tracked file — only put throwaway values here |
+| empty list (default) | **no authentication at all.** One warning is logged at startup |
+
+```bash
+export IMAGEGEN_API_KEYS="$(openssl rand -hex 24)"
+uv run imagegen serve --config config/service.toml
+```
+
+### Sending the key
+
+Either header is accepted. `Bearer` is matched case-insensitively and values are
+whitespace-trimmed; comparison is constant-time (`secrets.compare_digest`) so a key
+matched later in the list does not answer measurably slower than one matched earlier.
+
+```bash
+-H "Authorization: Bearer $IMAGEGEN_API_KEYS"   # what the OpenAI SDK sends
+-H "x-api-key: $IMAGEGEN_API_KEYS"              # accepted too, for proxies and CLIs
+```
+
+With an OpenAI SDK you never set the header yourself:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:8080/v1", api_key="sk-demo-111")
+```
+
+### What is and is not gated
+
+| Endpoint | Key | Why |
+| --- | --- | --- |
+| `POST /v1/images/generations` | required | consumes GPU time |
+| `POST /v1/images/edits` | required | consumes GPU time |
+| `GET /health/backends` | required | exposes model ids, ports, PIDs, limits |
+| `GET /health` | open | liveness probes must work without credentials |
+| `GET /v1/models` | open | lists model ids only |
+| `GET /v1/images/content/{id}` | open | the unguessable URL token *is* the capability, like OpenAI's pre-signed object URLs |
+
+A missing key and a wrong key produce the same body, so a client cannot probe which
+keys exist:
+
+```json
+{"error": {"message": "invalid API key", "type": "invalid_request_error", "code": "invalid_api_key"}}
+```
+
+### Checking auth without generating
+
+A valid key on an invalid `size` returns `400`, not `401` — reaching validation proves
+the key was accepted, and it costs milliseconds instead of a full generation:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8080/v1/images/generations \
+  -H "Authorization: Bearer $IMAGEGEN_API_KEYS" -H 'Content-Type: application/json' \
+  -d '{"model":"qwen-image-2.1-turbo","prompt":"x","size":"1000x1000"}'   # 400 = key accepted
+```
+
+### Deliberate limits
+
+- **Not per-user.** No identities, quotas or per-key usage tracking. Everyone sharing a
+  key is the same caller; rotate by changing `IMAGEGEN_API_KEYS` and restarting.
+- **Bearer tokens travel in cleartext.** Fine on loopback; anything crossing a network
+  belongs behind an HTTPS reverse proxy (Caddy, nginx) that terminates TLS.
+- **The backends themselves have no credentials.** `sd-server` listens on `127.0.0.1`
+  only, which is enforced by the launcher. Anyone able to reach ports 8111/8112 can
+  generate freely and bypass the queue, so those ports must stay local.
 
 ## Behaviour measured on an RTX 2070 (8 GB, CPU offload, 512×512)
 
