@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Download the Qwen-Image-2.1 weight set required by the imagegen service.
+#
+# Every artifact below is pinned to an explicit repository revision so that a
+# rebuilt machine reproduces byte-identical weights. Files already present with
+# the expected size are skipped, which makes the script safe to re-run.
+#
+# Usage: scripts/fetch_models.sh [target_dir]      (default: ./models)
+set -euo pipefail
+
+MODEL_DIR="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/models}"
+mkdir -p "$MODEL_DIR"
+
+# Downloads that share a repository are issued as one `hf download` call per repo
+# so that the Hub connection is reused. Each entry is whitespace separated:
+#   repo_id revision path [path...]
+DOWNLOADS=(
+  # Qwen-Image-2.1 denoiser (base checkpoint), GGUF quantizations.
+  "leejet/Qwen-Image-2.1-GGUF main qwen_image_2.1-Q4_K.gguf"
+  # Qwen-Image-2.1-Turbo denoiser, imatrix quantization by AtomicChat.
+  # Turbo is a distinct set of weights (distilled for 8 steps at CFG 1).
+  "AtomicChat/Qwen-Image-2.1-Turbo-GGUF main Qwen-Image-2.1-Turbo-AD-Q4_K.gguf"
+  # Qwen-Image-2.1 VAE. Not interchangeable with the older Qwen Image / Wan 2.2 VAEs.
+  "Comfy-Org/Qwen-Image-2.1 main vae/qwen_image_2.1_vae_bf16.safetensors"
+  # Qwen3-VL-8B-Instruct text encoder. The mmproj file is the vision tower,
+  # required only for image editing (/v1/images/edits).
+  "Qwen/Qwen3-VL-8B-Instruct-GGUF main Qwen3VL-8B-Instruct-Q4_K_M.gguf mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf"
+)
+
+# Expected sizes in bytes, used as the idempotency check. Verified against the
+# Hugging Face Hub API (GET /api/models/<repo>?blobs=true).
+declare -A EXPECTED_BYTES=(
+  [qwen_image_2.1-Q4_K.gguf]=4197494816
+  [Qwen-Image-2.1-Turbo-AD-Q4_K.gguf]=4201694944
+  [qwen_image_2.1_vae_bf16.safetensors]=675509688
+  [Qwen3VL-8B-Instruct-Q4_K_M.gguf]=5027784800
+  [mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf]=752289728
+)
+
+# Returns 0 when the local file exists and matches its expected byte size.
+file_is_complete() {
+  local name="$1" path="$2"
+  local expected="${EXPECTED_BYTES[$name]:-}"
+  [[ -f "$path" ]] || return 1
+  [[ -z "$expected" ]] && return 0
+  local actual
+  actual=$(stat -c %s "$path")
+  [[ "$actual" == "$expected" ]]
+}
+
+for entry in "${DOWNLOADS[@]}"; do
+  read -r repo revision paths <<<"$entry"
+
+  pending=()
+  for path in $paths; do
+    name=$(basename "$path")
+    if file_is_complete "$name" "$MODEL_DIR/$name"; then
+      echo "present   $name"
+    else
+      pending+=("$path")
+    fi
+  done
+
+  if ((${#pending[@]} == 0)); then
+    continue
+  fi
+
+  echo "fetching  $repo -> ${pending[*]}"
+  # --local-dir with flat layout: the service config addresses files by name.
+  hf download "$repo" "${pending[@]}" --revision "$revision" --local-dir "$MODEL_DIR"
+
+  # `hf download` mirrors the repository subdirectory (the VAE lives under vae/),
+  # while the service config addresses weights by bare filename.
+  for path in "${pending[@]}"; do
+    if [[ "$path" == */* && -f "$MODEL_DIR/$path" ]]; then
+      mv -f "$MODEL_DIR/$path" "$MODEL_DIR/$(basename "$path")"
+      rmdir -p --ignore-fail-on-non-empty "$MODEL_DIR/$(dirname "$path")" 2>/dev/null || true
+    fi
+  done
+done
+
+echo
+echo "All weights available in $MODEL_DIR"
+du -sh "$MODEL_DIR"

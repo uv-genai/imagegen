@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+dist/
+*.egg-info/
+
+# Service artefacts
+logs/
+models/
+out/
+
+# Vendored engine: built from source by scripts/build_engine.sh, never committed
+third_party/

@@ -1,0 +1,98 @@
+# imagegen service configuration
+#
+# Relative paths in this file resolve against the directory containing it, so
+# `../models` is the models/ directory at the repository root.
+
+[service]
+host = "127.0.0.1"
+port = 8080
+
+# Bearer tokens accepted on /v1/*. An empty list disables authentication, which is
+# only safe while the service listens on loopback. Set IMAGEGEN_API_KEYS instead of
+# committing real keys.
+api_keys = []
+
+# Advertised base URL for response_format="url". Requests for URLs fail with a
+# clear 400 when this is unset, because a half-configured URL would be useless.
+public_base_url = "http://127.0.0.1:8080"
+
+# A generation on a consumer GPU with CPU-offloaded weights takes minutes, not
+# seconds; the synchronous OpenAI endpoint must be allowed to wait that long.
+request_timeout_seconds = 1800
+max_waiting_requests = 4
+blob_ttl_seconds = 3600
+blob_capacity = 64
+
+[backends]
+sd_server_binary = "../third_party/stable-diffusion.cpp/build/bin/sd-server"
+models_dir = "../models"
+
+# on_demand loads a model on its first request and unloads it when idle; eager
+# loads every model at startup and restarts a crashed one.
+lifecycle = "on_demand"
+
+# Each backend holds ~9 GB of weights plus activations. Two of them do not fit in
+# 8 GB of VRAM, so a model switch unloads the other one. Raise this only on a
+# machine that genuinely fits more than one.
+max_resident_backends = 1
+
+idle_timeout_seconds = 300
+start_timeout_seconds = 600
+stop_timeout_seconds = 60
+offload_to_cpu = true
+diffusion_flash_attention = true
+log_level = "info"
+extra_args = []
+
+# ---------------------------------------------------------------------------
+# Models
+#
+# Sampling defaults here are not cosmetic: the Turbo checkpoint is only correct
+# at 8 steps, CFG 1 and its own sigma schedule. The schedule is the
+# `sample_sigmas` array from Qwen/Qwen-Image-2.1-Turbo/model_index.json with a
+# trailing 0.0, and it must not be "corrected" to the base model's behaviour.
+# ---------------------------------------------------------------------------
+
+[[models]]
+id = "qwen-image-2.1"
+description = "Qwen-Image-2.1, 7B single-stream DiT. Highest quality, 40 steps at CFG 6."
+diffusion_model = "qwen_image_2.1-Q4_K.gguf"
+vae = "qwen_image_2.1_vae_bf16.safetensors"
+text_encoder = "Qwen3VL-8B-Instruct-Q4_K_M.gguf"
+vision_encoder = "mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf"
+port = 8111
+supports_editing = true
+default_size = "1024x1024"
+dimension_multiple = 32
+# Qwen recommends ~2 MP (2048x2048). 1 MP is the practical ceiling on an 8 GB card
+# with offloaded weights; raise it together with max_resident_backends on bigger GPUs.
+max_pixels = 1048576
+max_images_per_request = 1
+
+[models.sampling]
+steps = 40
+cfg = 6.0
+sample_method = "euler"
+scheduler = "discrete"
+negative_prompt = ""
+
+[[models]]
+id = "qwen-image-2.1-turbo"
+description = "Qwen-Image-2.1-Turbo, distilled 8-step checkpoint at CFG 1 with a fixed sigma schedule."
+diffusion_model = "Qwen-Image-2.1-Turbo-AD-Q4_K.gguf"
+vae = "qwen_image_2.1_vae_bf16.safetensors"
+text_encoder = "Qwen3VL-8B-Instruct-Q4_K_M.gguf"
+vision_encoder = "mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf"
+port = 8112
+supports_editing = true
+default_size = "1024x1024"
+dimension_multiple = 32
+max_pixels = 1048576
+max_images_per_request = 1
+
+[models.sampling]
+steps = 8
+cfg = 1.0
+sample_method = "euler"
+custom_sigmas = [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0.0]
+negative_prompt = ""
