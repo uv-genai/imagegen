@@ -13,6 +13,11 @@
 # upstream has moved past the pin, which is exactly how this script used to
 # break for fresh installs.
 #
+# Each backend gets its own build directory, so `cuda` and `vulkan` can coexist
+# and switching between them does not throw away a working engine. `cuda` keeps
+# the historic `build/` path because that is what released configs point at;
+# every other backend builds into `build-<backend>`.
+#
 # Usage: scripts/build_engine.sh [cuda|vulkan|cpu]     (default: cuda)
 set -euo pipefail
 
@@ -24,12 +29,32 @@ SRC_DIR="$ROOT/third_party/stable-diffusion.cpp"
 
 die() { echo "error: $*" >&2; exit 1; }
 
+# -DSD_CUDA already sets GGML_CUDA in the engine's CMakeLists, so the GGML option
+# is not passed here. One option per backend keeps the cache readable.
 case "$BACKEND" in
-  cuda)   CMAKE_FLAGS=(-DSD_CUDA=ON -DGGML_CUDA=ON) ;;
-  vulkan) CMAKE_FLAGS=(-DSD_VULKAN=ON) ;;
-  cpu)    CMAKE_FLAGS=() ;;
+  cuda)   CMAKE_FLAGS=(-DSD_CUDA=ON);   BUILD_DIR="build" ;;
+  vulkan) CMAKE_FLAGS=(-DSD_VULKAN=ON); BUILD_DIR="build-vulkan" ;;
+  cpu)    CMAKE_FLAGS=();               BUILD_DIR="build-cpu" ;;
   *) die "unknown backend: $BACKEND (choose cuda, vulkan or cpu)" ;;
 esac
+BUILD_PATH="$SRC_DIR/$BUILD_DIR"
+
+# Which accelerator a build directory was configured for, read from its CMake
+# cache. Returns an empty string when nothing is configured there yet. This is
+# checked before configuring because reconfiguring a directory for a different
+# backend silently replaces a working engine and forces a full rebuild.
+cached_backend() {
+  local cache="$1/CMakeCache.txt" option
+  [[ -f "$cache" ]] || return 0
+  for option in SD_CUDA SD_VULKAN SD_METAL SD_OPENCL SD_HIPBLAS SD_SYCL SD_MUSA; do
+    if grep -q "^${option}:BOOL=ON$" "$cache"; then
+      # Lower-cased so it compares equal to the $BACKEND argument.
+      echo "${option#SD_}" | tr '[:upper:]' '[:lower:]'
+      return 0
+    fi
+  done
+  echo "cpu"
+}
 
 if ! command -v git >/dev/null; then
   die "git is required to fetch the engine"
@@ -69,11 +94,32 @@ $(git submodule status --recursive)"
 fi
 echo "engine at $(git rev-parse --short HEAD) with submodules in place"
 
-echo "building with backend=$BACKEND"
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DSD_BUILD_EXAMPLES=ON "${CMAKE_FLAGS[@]}"
-cmake --build build -j"$(nproc)"
+existing="$(cached_backend "$BUILD_PATH")"
+if [[ -n "$existing" && "$existing" != "$BACKEND" ]]; then
+  die "$BUILD_DIR is configured for $existing, not $BACKEND. Reconfiguring it here
+       would replace that engine and rebuild everything. Either keep them apart
+       (cuda builds into 'build', the others into 'build-<backend>'), or remove
+       the directory you no longer want:
+         rm -rf \"$BUILD_PATH\""
+fi
+
+echo "building backend=$BACKEND into $BUILD_DIR"
+cmake -B "$BUILD_PATH" -DCMAKE_BUILD_TYPE=Release -DSD_BUILD_EXAMPLES=ON "${CMAKE_FLAGS[@]}"
+cmake --build "$BUILD_PATH" -j"$(nproc)"
 
 echo
 echo "built:"
-ls -1 "$SRC_DIR/build/bin/sd-server" "$SRC_DIR/build/bin/sd-cli"
-"$SRC_DIR/build/bin/sd-server" --version
+ls -1 "$BUILD_PATH/bin/sd-server" "$BUILD_PATH/bin/sd-cli"
+"$BUILD_PATH/bin/sd-server" --version
+
+# Device indices are what --backend and --max-vram refer to, and their order comes
+# from loader enumeration, not from speed: a laptop that exposes an iGPU as Vulkan0
+# would send a bare `--backend vulkan` to the slow chip. Print them after every
+# build so the index used in config is a deliberate choice.
+echo
+echo "devices this engine can address:"
+"$BUILD_PATH/bin/sd-server" --list-devices
+
+echo
+echo "to serve it, set in config/service.toml:"
+echo "  sd_server_binary = \"../third_party/stable-diffusion.cpp/$BUILD_DIR/bin/sd-server\""

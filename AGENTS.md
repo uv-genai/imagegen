@@ -109,6 +109,12 @@ There is no configured linter or formatter; keep to the style already present
    but it garbled at least one caption in 3 of 3 seeds while both Qwen models were
    letter-exact — so do not promote it to "the design model" on the strength of its
    marketing. Its reason for being here is Apache-2.0 and speed.
+8. **`cuda` builds into `build/` while `vulkan` and `cpu` build into
+   `build-<backend>`.** The asymmetry is intentional: shipped configs reference
+   `build/bin/sd-server`, so renaming it would break every existing install for a
+   cosmetic win. Engines coexist because each backend has its own directory, and
+   the script refuses to reconfigure one whose CMake cache names a different
+   backend — that is how a working engine gets silently replaced.
 
 ## Verifying changes
 
@@ -155,6 +161,11 @@ the pin, rebuild, re-run the smoke test, and re-check
 - Bumping the version means editing **`pyproject.toml` only**. `__version__` is read
   from installed package metadata; confirm with `imagegen --version` and `GET /health`.
 - The weights download needs no HF account or token (verified with `HF_TOKEN` unset).
+- `sd-server --list-devices` is the authority on device indices, and their order is
+  loader order, not speed: here `Vulkan0` is the Intel iGPU and the RTX 2070 is
+  `Vulkan1`. Never write a bare `vulkan`/`cuda` device reference from memory.
+  Vulkan was built and run at the pin (512×512 generation: 47 s vs ~16 s on CUDA),
+  so treat it as the no-CUDA fallback in anything you document.
 
 ## Repo conventions
 

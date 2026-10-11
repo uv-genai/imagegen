@@ -79,6 +79,33 @@ Peek before committing to the download:
 scripts/fetch_models.sh --dry-run     # lists the files and ~14.8 GB total, writes nothing
 ```
 
+### Compute backend
+
+Chosen at build time, one directory per backend so engines coexist instead of
+replacing each other:
+
+| Command | Build directory | When |
+| --- | --- | --- |
+| `scripts/build_engine.sh cuda` | `third_party/stable-diffusion.cpp/build` | default; keeps this historic path |
+| `scripts/build_engine.sh vulkan` | `third_party/stable-diffusion.cpp/build-vulkan` | no CUDA installed — AMD, Intel, other drivers |
+| `scripts/build_engine.sh cpu` | `third_party/stable-diffusion.cpp/build-cpu` | reference only; slow |
+
+Every build finishes by printing `sd-server --list-devices` and the exact
+`sd_server_binary` line to paste into `config/service.toml`. Switching engines is
+that one line — nothing rebuilds. The indices it prints (`CUDA0`, `Vulkan0`,
+`Vulkan1`) are what `--backend` and `--max-vram` refer to, and they follow loader
+enumeration order, not speed: on this laptop `Vulkan0` is the Intel iGPU and the
+RTX 2070 is `Vulkan1`, so name the index you mean rather than a bare `vulkan`.
+
+Vulkan was built and exercised at the pinned commit here: it configures, links
+`libvulkan.so.1`, `imagegen doctor` lists both Vulkan devices, and a 512×512 Turbo
+generation through the gateway completed in **47 s against ~16 s on CUDA**. Vulkan
+is the route for machines without CUDA, not a speed improvement.
+
+Building one backend into a directory configured for another is **refused**, not
+silently reconfigured — that would replace a working engine and force a full
+rebuild — and the error names the directory to remove if you really want to.
+
 ### Verify the install
 
 ```bash
