@@ -189,6 +189,93 @@ Two things worth knowing before changing quants:
   is closest; Q4_K_M is roughly equivalent to a Q4 denoiser in perceptual drift.
   Swap `text_encoder` in the config if you have the RAM for it.
 
+### Adding a model
+
+A model is one `[[models]]` block in `config/service.toml` — no code, no restart
+ceremony beyond restarting the service. The schema is **strict**: a misspelled or
+unsupported key is a startup error naming that key, never a silent no-op.
+
+| Key | Required | Default | Notes |
+| --- | --- | --- | --- |
+| `id` | yes | — | Public identifier, `[a-z0-9][a-z0-9._-]*`; must be unique |
+| `diffusion_model` | yes | — | Denoiser file name inside `models_dir` |
+| `vae` | yes | — | VAE file name |
+| `text_encoder` | yes | — | Passed to `sd-server` as `--llm` |
+| `port` | yes | — | Loopback port for this instance; must be unique |
+| `default_size` | yes | — | `"1024x1024"`; used when the client omits `size` |
+| `max_pixels` | yes | — | Ceiling on `width * height` |
+| `sampling` | yes | — | `[models.sampling]` table, below |
+| `description` | no | `""` | Shown by `imagegen models` |
+| `vision_encoder` | no | none | mmproj tower needed for editing |
+| `supports_editing` | no | `false` | Offers `/v1/images/edits`; **requires `vision_encoder`** |
+| `dimension_multiple` | no | `32` | Width and height must be multiples of it |
+| `max_images_per_request` | no | `1` | 1..8 |
+
+`[models.sampling]` — these become the backend's own startup flags *and* the
+defaults sent with every request, so a distilled checkpoint stays correct even if
+something talks to `sd-server` directly:
+
+| Key | Required | Default | `sd-server` flag |
+| --- | --- | --- | --- |
+| `steps` | yes | — | `--steps` |
+| `cfg` | yes | — | `--cfg-scale` |
+| `sample_method` | yes | — | `--sampling-method` |
+| `scheduler` | no | none | `--scheduler`, when set |
+| `flow_shift` | no | none | `--flow-shift`, when set |
+| `custom_sigmas` | no | `[]` | `--sigmas`, comma-joined; each value in `[0, 1]` |
+| `negative_prompt` | no | `""` | used when the client sends none |
+
+`id`, `description`, `default_size`, `max_pixels` and `dimension_multiple` are
+gateway-side policy: they validate requests and never reach the command line.
+`supports_editing` is the exception that does change the process — the vision tower
+is only passed as `--llm_vision` when it is true.
+
+Weight paths are **file names resolved against `[backends].models_dir`**, which is
+itself relative to the config file, so a checkout stays relocatable. Files must end
+in `.gguf` or `.safetensors`.
+
+Worked example — a cheaper variant of a model already on disk:
+
+```toml
+[[models]]
+id = "qwen-image-2.1-fast"
+description = "20-step base variant for drafts."
+diffusion_model = "qwen_image_2.1-Q4_K.gguf"
+vae = "qwen_image_2.1_vae_bf16.safetensors"
+text_encoder = "Qwen3VL-8B-Instruct-Q4_K_M.gguf"
+vision_encoder = "mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf"
+port = 8113
+supports_editing = true
+default_size = "832x832"
+dimension_multiple = 32
+max_pixels = 1048576
+
+[models.sampling]
+steps = 20
+cfg = 4.0
+sample_method = "euler"
+scheduler = "discrete"
+```
+
+Then confirm it in this order:
+
+```bash
+uv run imagegen doctor --config config/service.toml   # weights present, exit 0
+uv run imagegen plan --model qwen-image-2.1-fast      # the exact sd-server argv
+uv run imagegen models                                # it appears in the registry
+curl -s localhost:8080/v1/models | python3 -m json.tool  # and to clients
+```
+
+To add a model whose weights are new to the machine, also add its files to
+`scripts/fetch_models.sh` so the download stays reproducible.
+
+**When config is not enough.** A model that needs an engine flag no field
+represents cannot be added this way — `[backends].extra_args` is appended to
+*every* model's command line, so it cannot express a per-model flag. Ming-Image
+is the concrete case: it needs `--tokenizer <tokenizer.json>` for its Ling-mini-2.0
+encoder, which has no field yet. Adding one means a `ModelProfile` field plus
+`build_server_args` handling; see [AGENTS.md](AGENTS.md).
+
 ## API
 
 | Endpoint | Notes |

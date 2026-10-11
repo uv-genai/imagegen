@@ -47,10 +47,53 @@ extra_args = []
 # ---------------------------------------------------------------------------
 # Models
 #
-# Sampling defaults here are not cosmetic: the Turbo checkpoint is only correct
-# at 8 steps, CFG 1 and its own sigma schedule. The schedule is the
-# `sample_sigmas` array from Qwen/Qwen-Image-2.1-Turbo/model_index.json with a
-# trailing 0.0, and it must not be "corrected" to the base model's behaviour.
+# One [[models]] block per model the service offers. Adding a model is config
+# only, provided its weights fit the fields below; a model that needs an engine
+# flag no field represents (Ming-Image's `--tokenizer`, for instance) also needs
+# a ModelProfile field in config.py -- see AGENTS.md.
+#
+# Every table is strict: an unknown key is a startup error that names the key,
+# never a silent no-op. Weight values are file names inside models_dir, which
+# itself resolves against this file's directory. Files must end in .gguf or
+# .safetensors. Model ids and ports must be unique, and at least one model is
+# required.
+#
+#   key                      req  default  meaning
+#   id                       yes           public id: [a-z0-9][a-z0-9._-]*
+#   description              no   ""       shown by `imagegen models`
+#   diffusion_model          yes           denoiser (DiT / UNet)
+#   vae                      yes           VAE
+#   text_encoder             yes           passed to sd-server as --llm
+#   vision_encoder           no   none      mmproj vision tower, for editing
+#   port                     yes           loopback port for this sd-server
+#   supports_editing         no   false     offer /v1/images/edits; needs
+#                                           vision_encoder, and only then is
+#                                           --llm_vision passed
+#   default_size             yes           "1024x1024"; used when the client
+#                                           omits size, and must itself satisfy
+#                                           the two rules below
+#   dimension_multiple       no   32        width and height must be multiples
+#   max_pixels               yes           ceiling on width * height
+#   max_images_per_request   no   1         1..8
+#   sampling                 yes           [models.sampling] table, below
+#
+# Sampling defaults are not cosmetic: the Turbo checkpoint is only correct at 8
+# steps, CFG 1 and its own sigma schedule. That schedule is the `sample_sigmas`
+# array from Qwen/Qwen-Image-2.1-Turbo/model_index.json with a trailing 0.0, and
+# it must not be "corrected" to the base model's behaviour.
+#
+#   [models.sampling] key    req  default  becomes
+#   steps                    yes           --steps
+#   cfg                      yes           --cfg-scale
+#   sample_method            yes           --sampling-method
+#   scheduler                no   none     --scheduler, when set
+#   flow_shift               no   none     --flow-shift, when set
+#   custom_sigmas            no   []       --sigmas, comma-joined; each in [0,1]
+#   negative_prompt          no   ""       sent when the client sends none
+#
+# After editing, confirm with:
+#   uv run imagegen doctor --config config/service.toml
+#   uv run imagegen plan --model <id>       # exact sd-server command line
 # ---------------------------------------------------------------------------
 
 [[models]]

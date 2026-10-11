@@ -55,7 +55,26 @@ There is no configured linter or formatter; keep to the style already present
 - **Backends listen on `127.0.0.1` only and have no credentials.** Anything that
   binds them elsewhere must go through the gateway's authentication.
 - **Add new tunables to `config.py`, not to code.** The model registry is data:
-  adding a model should require editing `config/service.toml` only.
+  adding a model should mean editing `config/service.toml` only. The key list, the
+  required set and the defaults live in the banner above `[[models]]` there, and in
+  `README.md#adding-a-model` — update **both** whenever a field changes.
+- **Every config table is strict (`extra="forbid"`)**, so an unknown key is a named
+  startup error rather than a no-op. That is deliberate: a silently ignored sampling
+  value produces wrong images that look like the model's fault. New keys therefore
+  go into `ModelProfile` / `SamplingDefaults` first, never into ad-hoc parsing.
+- **Weight names are not paths.** They resolve through `BackendSettings.weight_path`
+  against `[backends].models_dir`, relative to the config file, and must end in
+  `.gguf` or `.safetensors`. `setup_problems()` checks existence — the vision tower
+  only when `supports_editing` is set.
+- **`[backends].extra_args` is global.** It is appended verbatim to *every*
+  `sd-server` command line, so it must never be used for a per-model flag: it would
+  be handed to unrelated models. A per-model flag needs a `ModelProfile` field.
+- **To support a new engine flag**, add the field to `ModelProfile`, emit it in
+  `build_server_args()`, cover it in `tests/test_backend_process.py`, and record it
+  in the two tables above. Ming-Image is the standing example: it conditions on
+  Ling-mini-2.0 and needs `--tokenizer <tokenizer.json>`, which has no field yet,
+  so it cannot be served until one is added. Read `sd-server --help` at the pinned
+  build before adding anything — do not infer flag names from model docs.
 
 ## Things that look wrong but are load-bearing
 
