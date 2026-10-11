@@ -32,8 +32,34 @@ if [ "$#" -gt 0 ]; then
     shift
 fi
 
+# A fresh volume has no weights, and the gateway validates them at startup -- so
+# without this check the container just crash-loops and the cause scrolls away.
+# Say what to run instead, before anything else.
+preflight_weights() {
+    if [ -n "$(find /models -maxdepth 1 -name '*.gguf' -print -quit 2>/dev/null)" ]; then
+        return 0
+    fi
+    cat >&2 <<'MSG'
+imagegen: no weights in /models.
+
+Populate the volume first (about 14.8 GB, resumable):
+
+    docker compose run --rm fetch-models
+
+or, with docker directly:
+
+    docker run --rm -v imagegen-models:/models imagegen:latest fetch-models
+
+If your weights live on the host instead, point the mount at them:
+
+    IMAGEGEN_MODELS_DIR=/path/to/models docker compose up -d
+MSG
+    exit 1
+}
+
 case "$cmd" in
     serve)
+        preflight_weights
         echo "imagegen: backend=$BACKEND, engine=$("$ENGINE_ROOT/current/bin/sd-server" --version 2>/dev/null | head -1)"
         exec imagegen serve --config "$CONFIG"
         ;;

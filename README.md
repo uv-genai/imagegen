@@ -227,6 +227,28 @@ docker run --rm -v imagegen-models:/models imagegen:latest fetch-models
 # equivalently: docker compose run --rm fetch-models
 ```
 
+**Fetch before you `up`.** The gateway validates weights at startup, so serving an
+empty volume fails. Rather than crash-looping silently, the container prints the
+command above and exits.
+
+To use weights that already live on the host, skip the named volume and bind-mount
+them — `IMAGEGEN_MODELS_DIR` replaces the volume for both services:
+
+```bash
+IMAGEGEN_MODELS_DIR="$HOME/models" IMAGEGEN_API_KEYS="..." docker compose up -d
+```
+
+### Compose ergonomics
+
+`IMAGEGEN_API_KEYS` is declared required, so **every** Compose command needs it —
+including `ps`, `logs` and `down`. Put it in a `.env` file next to
+`docker-compose.yml` (gitignored) so you do not repeat it:
+
+```
+IMAGEGEN_API_KEYS=your-key
+IMAGEGEN_BACKEND=cuda
+```
+
 ### Run
 
 ```bash

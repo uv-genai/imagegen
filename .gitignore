@@ -14,3 +14,8 @@ out/
 
 # Vendored engine: built from source by scripts/build_engine.sh, never committed
 third_party/
+
+# Compose environment file: holds IMAGEGEN_API_KEYS. Never commit.
+.env
+.env.*
+!.env.example

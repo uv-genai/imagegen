@@ -30,7 +30,9 @@ services:
       NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
       NVIDIA_DRIVER_CAPABILITIES: all
     volumes:
-      - imagegen-models:/models
+      # Named volume by default. Set IMAGEGEN_MODELS_DIR to bind-mount weights that
+      # already live on the host instead.
+      - "${IMAGEGEN_MODELS_DIR:-imagegen-models}:/models"
     deploy:
       resources:
         reservations:
@@ -46,7 +48,7 @@ services:
     profiles: ["tools"]
     command: ["fetch-models"]
     volumes:
-      - imagegen-models:/models
+      - "${IMAGEGEN_MODELS_DIR:-imagegen-models}:/models"
     restart: "no"
 
 volumes:
