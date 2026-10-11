@@ -85,8 +85,15 @@ scripts/fetch_models.sh --dry-run     # lists the files and ~14.8 GB total, writ
 uv run imagegen doctor                                  # exit 0 = ready to serve
 uv run imagegen models                                  # registry + sampling defaults
 uv run imagegen plan --model qwen-image-2.1-turbo       # exact sd-server command line
+third_party/stable-diffusion.cpp/build/bin/sd-server --version   # must report the pinned commit
 uv run pytest                                           # 95 tests; the 2 needing weights self-skip
 ```
+
+`sd-server --version` should print `stable-diffusion.cpp version master-951-f89d9b1,
+commit f89d9b1`. That is the commit this service was built and measured against;
+`PINNED_COMMIT` in `scripts/build_engine.sh` is the one place to change it. If the
+version differs, the engine was built from something else and the results below do
+not apply.
 
 `doctor` prints the compute devices the engine sees and lists every missing
 weight by path, so a half-finished setup reports exactly what is absent:
@@ -99,6 +106,32 @@ CPU    Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
 configuration OK: 2 model(s), lifecycle=on_demand
 ```
 
+### If something is missing
+
+`doctor` exits non-zero and lists **every** missing artefact by absolute path, not
+just the first one, so one run tells you what is left:
+
+```
+problems:
+  - sd-server binary not found: /path/to/imagegen/third_party/.../build/bin/sd-server
+  - model 'qwen-image-2.1': weight file not found: /path/to/imagegen/models/qwen_image_2.1-Q4_K.gguf
+  ...
+```
+
+The first line means step 2 did not finish (`scripts/build_engine.sh cuda`); the rest
+mean step 3 did not (`scripts/fetch_models.sh`). Both scripts are resumable.
+
+### Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| `hf: command not found` | obsolete — weights are fetched through `uvx --from huggingface-hub`; if you see this, `git pull` |
+| `nvcc: command not found` | CUDA Toolkit is not installed; install it, or build for another backend: `scripts/build_engine.sh vulkan` / `cpu` |
+| `pinned commit ... is not reachable` | upstream history was rewritten. Verify a new commit builds and passes `scripts/smoke_test.py`, then update `PINNED_COMMIT` |
+| backend fails to start with an allocation error | the GPU is full — stop other GPU processes, or lower `max_pixels` in `config/service.toml` |
+| first request is much slower than the rest | expected: models load on demand. Turbo loads in ~2-3 s, and switching models unloads the other one |
+| weights refused / 401 from Hugging Face | not expected for the shipped files, which need no account. If a future repo is gated, run `uvx --from huggingface-hub hf auth login` |
+
 ### Hardware budget
 
 | Resource | Amount |
@@ -106,6 +139,10 @@ configuration OK: 2 model(s), lifecycle=on_demand
 | Disk | ~15 GB weights + ~1.5 GB engine build tree |
 | RAM | ~10 GB per loaded backend (only one is loaded by default) |
 | VRAM | runs on 8 GB with CPU offload, at a ~1 MP ceiling; 12 GB+ for the 2 MP Qwen recommends |
+
+The engine clone itself is ~400 MB of checkout plus ~1.5 GB of build tree, and
+`doctor` reports the compute devices it found, so an unsupported GPU is visible
+before the first generation rather than during it.
 
 ## Uninstall
 

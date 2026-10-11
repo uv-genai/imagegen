@@ -1,5 +1,9 @@
 # Architecture
 
+Installation, prerequisites and troubleshooting live in
+[README.md](../README.md#install); this document covers structure, contracts and
+why they are shaped the way they are.
+
 ## What the service is
 
 `imagegen` exposes an **OpenAI-compatible image API** in front of

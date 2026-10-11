@@ -11,18 +11,35 @@ inference.** All sampling happens in supervised `sd-server` child processes.
 Read `docs/architecture.md` before changing request handling — it defines the
 translation contract and the backend lifecycle.
 
+## Setup on a fresh checkout
+
+```bash
+uv sync                        # the service; uv also fetches Python >= 3.12
+scripts/build_engine.sh cuda   # engine; needs cmake >= 3.21, gcc/g++, nvcc
+scripts/fetch_models.sh        # ~14.8 GB; no Hugging Face account or token needed
+uv run imagegen doctor         # exit 0 when provisioned; lists every gap otherwise
+```
+
+`uv` and `git` are the only prerequisites for the service itself. `nvcc` is needed
+only to build the CUDA engine (`vulkan` needs `glslc`, `cpu` needs neither).
+
 ## Commands
 
 ```bash
 uv sync                                   # install
-uv run pytest                             # full suite (launches real subprocesses)
+uv run pytest                             # 95 tests; launches real subprocesses, no GPU needed
 uv run pytest tests/test_api.py -q        # one file
 uv run imagegen doctor --config config/service.toml
 uv run imagegen models
 uv run imagegen plan --model qwen-image-2.1-turbo
-scripts/build_engine.sh cuda              # build third_party engine
-scripts/fetch_models.sh                   # download weights (~15 GB)
+scripts/build_engine.sh cuda              # build third_party engine at the pinned commit
+scripts/fetch_models.sh                   # download weights (~14.8 GB, resumable)
+scripts/fetch_models.sh --dry-run         # list them without writing bytes
+third_party/stable-diffusion.cpp/build/bin/sd-server --version   # confirm the pin
 ```
+
+`uv run pytest` passes on a checkout with no engine and no weights: the two tests
+that inspect shipped weight files skip by design, so CI needs neither a GPU nor 15 GB.
 
 There is no configured linter or formatter; keep to the style already present
 (documented functions, early returns, files under ~200 lines).
@@ -72,15 +89,41 @@ There is no configured linter or formatter; keep to the style already present
 - Weights and model metadata must be verified via the Hugging Face API
   (`/api/models/<repo>?blobs=true`) — file names and byte sizes in
   `scripts/fetch_models.sh` come from there.
+- **Never truncate the output of a verification command.** A `list[:2]` in a debug
+  print once made `output_formats` look like `[png, jpeg]` when it was
+  `[png, jpeg, webp]`, and a working feature was removed on the strength of it.
+- **Verify install instructions in a clean clone**, not on a dev box. This machine
+  already had `hf`, `nvcc`, the weights and an engine at the pinned commit, which
+  hid two install-breaking bugs that only appeared from scratch:
+  `git clone "$URL" /tmp/x && cd /tmp/x && uv sync && uv run imagegen doctor`.
 - `pkill -f` patterns match the agent's own shell. Use a bracketed pattern such as
   `pkill -f "[b]in/imagegen serve"`.
+- `$?` after a pipeline is the **last** command's status, not the tool's. Pipe to
+  `tail` and a failing `doctor` looks like exit 0.
 
 ## Engine pinning
 
-`scripts/build_engine.sh` pins `f89d9b1` (`sd-server --version`). Sigma handling for
-Qwen-Image-2.1 changed as recently as `c150a6b` (2026-10-06), so upgrades are
-deliberate: change the pin, rebuild, re-run the smoke test, and re-check
+`scripts/build_engine.sh` pins `f89d9b13d730eabeede7314ce49dacd18d3c90c2`, reported
+by `sd-server --version` as `master-951-f89d9b1`. Sigma handling for Qwen-Image-2.1
+changed as recently as `c150a6b` (2026-10-06), so upgrades are deliberate: change
+the pin, rebuild, re-run the smoke test, and re-check
 `GET /sdcpp/v1/capabilities` for changed `output_formats` and `limits`.
+
+- **Do not reintroduce a shallow clone.** GitHub refuses to fetch an arbitrary SHA,
+  so `git clone --depth 1` followed by `git fetch --depth 1 origin <sha>` fails the
+  moment upstream moves past the pin — which is exactly how fresh installs broke.
+  The script uses `--filter=blob:none` (full history, contents on demand: ~1.5 s,
+  ~400 MB) so any commit is checkable, then asserts HEAD and every submodule match.
+- Verify a pin change with `sd-server --version` after building, not only before.
+
+## Environment facts about this repo's tooling
+
+- The Hugging Face CLI runs ephemerally as `uvx --from huggingface-hub hf` inside
+  `scripts/fetch_models.sh`. Do **not** add `huggingface-hub` to the service's
+  runtime dependencies — nothing under `src/` imports it.
+- Bumping the version means editing **`pyproject.toml` only**. `__version__` is read
+  from installed package metadata; confirm with `imagegen --version` and `GET /health`.
+- The weights download needs no HF account or token (verified with `HF_TOKEN` unset).
 
 ## Repo conventions
 
@@ -88,3 +131,6 @@ deliberate: change the pin, rebuild, re-run the smoke test, and re-check
 - Secrets stay in the environment (`IMAGEGEN_API_KEYS`), never in `config/service.toml`.
 - Tests live in `tests/`, shared helpers in `tests/support.py` (imported as
   `support`, since the tests directory is not a package).
+- Documentation is part of the deliverable: user-facing facts go in `README.md`,
+  agent-facing rules and traps in `AGENTS.md`, design rationale in
+  `docs/architecture.md`. Any command written into them must have been run.
