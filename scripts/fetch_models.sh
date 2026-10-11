@@ -5,11 +5,31 @@
 # rebuilt machine reproduces byte-identical weights. Files already present with
 # the expected size are skipped, which makes the script safe to re-run.
 #
-# Usage: scripts/fetch_models.sh [target_dir]      (default: ./models)
+# Usage: scripts/fetch_models.sh [target_dir] [--dry-run]
+#        (default target: ./models)
+#
+# --dry-run reports what would be fetched without transferring any bytes.
 set -euo pipefail
 
-MODEL_DIR="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/models}"
+MODEL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/models"
+DRY_RUN=()
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=(--dry-run) ;;
+    *) MODEL_DIR="$arg" ;;
+  esac
+done
 mkdir -p "$MODEL_DIR"
+
+if ! command -v uv >/dev/null 2>&1; then
+  echo "error: uv is required (https://docs.astral.sh/uv/); it supplies the Hugging Face CLI used below." >&2
+  exit 1
+fi
+
+# The Hugging Face CLI is fetched ephemerally rather than added to the service's
+# runtime dependencies: nothing under src/ imports it, and a deployed gateway
+# should not carry a download tool in its dependency graph.
+hf() { uvx --from huggingface-hub hf "$@"; }
 
 # Downloads that share a repository are issued as one `hf download` call per repo
 # so that the Hub connection is reused. Each entry is whitespace separated:
@@ -67,7 +87,7 @@ for entry in "${DOWNLOADS[@]}"; do
 
   echo "fetching  $repo -> ${pending[*]}"
   # --local-dir with flat layout: the service config addresses files by name.
-  hf download "$repo" "${pending[@]}" --revision "$revision" --local-dir "$MODEL_DIR"
+  hf download "$repo" "${pending[@]}" --revision "$revision" --local-dir "$MODEL_DIR" "${DRY_RUN[@]}"
 
   # `hf download` mirrors the repository subdirectory (the VAE lives under vae/),
   # while the service config addresses weights by bare filename.
@@ -78,6 +98,12 @@ for entry in "${DOWNLOADS[@]}"; do
     fi
   done
 done
+
+if ((${#DRY_RUN[@]})); then
+  echo
+  echo "dry run complete: nothing was written to $MODEL_DIR"
+  exit 0
+fi
 
 echo
 echo "All weights available in $MODEL_DIR"

@@ -89,11 +89,7 @@ def _cmd_plan(args: argparse.Namespace) -> int:
 def _cmd_doctor(args: argparse.Namespace) -> int:
     """Check the binary, the weight files and the requested devices before serving."""
     config, config_dir = _load(args.config)
-    problems: list[str] = []
-    try:
-        config.verify_weights(config_dir)
-    except ServiceConfigurationError as exc:
-        problems.append(str(exc))
+    problems: list[str] = config.setup_problems(config_dir)
 
     binary = config.backends.resolved_binary(config_dir)
     if binary.is_file() and shutil.which(binary.name) is None:

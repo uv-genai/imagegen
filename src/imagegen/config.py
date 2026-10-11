@@ -207,21 +207,39 @@ class ServiceConfig(BaseModel):
                 return profile
         return None
 
-    def verify_weights(self, config_dir: Path) -> None:
-        """Fail fast when a referenced weight file or the binary is missing."""
+    def setup_problems(self, config_dir: Path) -> list[str]:
+        """Every reason this configuration could not serve, collected in one pass.
+
+        Used by `imagegen doctor`. Reporting one problem at a time would make a
+        half-provisioned machine require a round trip per missing artefact, so
+        this accumulates instead of short-circuiting.
+        """
+        problems: list[str] = []
         binary = self.backends.resolved_binary(config_dir)
         if not binary.is_file():
-            raise ServiceConfigurationError(f"sd-server binary not found: {binary}")
+            problems.append(f"sd-server binary not found: {binary}")
         for profile in self.models:
             names = [profile.diffusion_model, profile.vae, profile.text_encoder]
             if profile.supports_editing and profile.vision_encoder is not None:
                 names.append(profile.vision_encoder)
             for name in names:
                 if not name.endswith(_WEIGHT_SUFFIXES):
-                    raise ServiceConfigurationError(f"model {profile.id!r}: {name!r} is not a gguf/safetensors file")
+                    problems.append(f"model {profile.id!r}: {name!r} is not a gguf/safetensors file")
+                    continue
                 path = self.backends.weight_path(config_dir, name)
                 if not path.is_file():
-                    raise ServiceConfigurationError(f"model {profile.id!r}: weight file not found: {path}")
+                    problems.append(f"model {profile.id!r}: weight file not found: {path}")
+        return problems
+
+    def verify_weights(self, config_dir: Path) -> None:
+        """Fail fast when a referenced weight file or the binary is missing.
+
+        Startup raises on the first problem; `setup_problems` is the diagnostic
+        variant that lists all of them.
+        """
+        problems = self.setup_problems(config_dir)
+        if problems:
+            raise ServiceConfigurationError("\n".join(problems))
 
 
 def load_config(path: str | Path) -> tuple[ServiceConfig, Path]:

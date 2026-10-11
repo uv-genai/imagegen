@@ -41,30 +41,76 @@ one `sd-server` per configured model and adds the parts a service needs:
   backend is unloaded (`max_resident_backends`).
 - **Authentication, validation, queueing** and OpenAI-shaped errors.
 
-## Requirements
+## Install
 
-- Linux, `cmake` >= 3.21, `gcc`/`g++`, `git`, `python` >= 3.12, [`uv`](https://docs.astral.sh/uv/), `curl`
-- A CUDA, Vulkan or CPU build of the engine (CUDA tested)
-- Disk: ~15 GB of weights. RAM: ~10 GB per loaded backend. VRAM: works on 8 GB
-  with CPU offload; 12 GB+ allows higher resolutions.
+### Prerequisites
 
-## Setup
+| Needed for | Requirement | Check / install |
+| --- | --- | --- |
+| everything | Linux, `git`, [`uv`](https://docs.astral.sh/uv/) | `git --version`; `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| the service itself | nothing else — `uv` fetches a Python ≥ 3.12 interpreter and all dependencies | `uv --version` |
+| `build_engine.sh cuda` | CUDA Toolkit (`nvcc`) + vendor driver | `nvcc --version` |
+| `build_engine.sh vulkan` | Vulkan SDK (`glslc`) | `glslc --version` |
+| `build_engine.sh` (any) | `cmake` ≥ 3.21, `gcc`/`g++` | `cmake --version` |
+
+No Hugging Face account or token is required for the shipped weights, and no GPU
+is needed to run the tests.
+
+### Steps
 
 ```bash
-# 1. Build the engine (pinned commit; see scripts/build_engine.sh)
-scripts/build_engine.sh cuda
+git clone https://github.com/uv-genai/imagegen.git
+cd imagegen
 
-# 2. Download the weights (~15 GB, resumable)
-scripts/fetch_models.sh
-
-# 3. Install the service
-uv sync
-
-# 4. Check that everything the config references exists
-uv run imagegen doctor
-uv run imagegen models
-uv run imagegen plan --model qwen-image-2.1-turbo   # show the sd-server command line
+uv sync                        # 1. the service: deps + venv          (seconds)
+scripts/build_engine.sh cuda   # 2. the inference engine              (~10 min)
+scripts/fetch_models.sh        # 3. the weights, ~14.8 GB, resumable  (network-bound)
+uv run imagegen doctor         # 4. verify binary, weights and devices
 ```
+
+Order is not fixed, but `doctor` is only meaningful after steps 2 and 3. Step 2
+clones [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) at
+one pinned commit (~400 MB, blobless) into `third_party/`; step 3 writes to
+`models/`. Both directories are gitignored and are never committed.
+
+Peek before committing to the download:
+
+```bash
+scripts/fetch_models.sh --dry-run     # lists the files and ~14.8 GB total, writes nothing
+```
+
+### Verify the install
+
+```bash
+uv run imagegen doctor                                  # exit 0 = ready to serve
+uv run imagegen models                                  # registry + sampling defaults
+uv run imagegen plan --model qwen-image-2.1-turbo       # exact sd-server command line
+uv run pytest                                           # 95 tests, no GPU or weights needed
+```
+
+`doctor` prints the compute devices the engine sees and lists every missing
+weight by path, so a half-finished setup reports exactly what is absent:
+
+```
+compute devices reported by sd-server:
+CUDA0  NVIDIA GeForce RTX 2070 with Max-Q Design
+CPU    Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+
+configuration OK: 2 model(s), lifecycle=on_demand
+```
+
+### Hardware budget
+
+| Resource | Amount |
+| --- | --- |
+| Disk | ~15 GB weights + ~1.5 GB engine build tree |
+| RAM | ~10 GB per loaded backend (only one is loaded by default) |
+| VRAM | runs on 8 GB with CPU offload, at a ~1 MP ceiling; 12 GB+ for the 2 MP Qwen recommends |
+
+## Uninstall
+
+Nothing installs system-wide. `rm -rf third_party models .venv` removes the
+engine, the weights and the virtualenv; the repository itself is just files.
 
 ## Run
 
@@ -241,7 +287,7 @@ prepared to wait; `service.request_timeout_seconds` bounds it.
 ## Tests
 
 ```bash
-uv run pytest                    # 93 tests: config, translation, HTTP API, process supervision
+uv run pytest                    # 95 tests: config, translation, HTTP API, process supervision
 scripts/smoke_test.py --base-url http://127.0.0.1:8080 --api-key "$KEY" \
     --model qwen-image-2.1-turbo --size 512x512
 ```

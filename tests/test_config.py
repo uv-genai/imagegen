@@ -147,6 +147,42 @@ def test_verify_weights_reports_weight_with_wrong_extension(tmp_path: Path) -> N
         config.verify_weights(config_dir)
 
 
+def test_setup_problems_lists_every_missing_artefact_at_once(tmp_path: Path) -> None:
+    """`doctor` must report a half-provisioned machine in one pass.
+
+    Reporting one problem per run would make a fresh install require a round trip
+    for each of the five weight files.
+    """
+    service_dir = tmp_path / "svc"
+    body = MINIMAL_BACKEND + MINIMAL_MODEL + MINIMAL_MODEL.replace('id = "m1"', 'id = "m2"').replace("port = 8111", "port = 8112")
+    path = write_config(service_dir, body)
+    make_fake_binary(service_dir)
+    config, config_dir = load_config(path)
+
+    problems = config.setup_problems(config_dir)
+    # Three weight files per model (diffusion, vae, text encoder), two models.
+    assert len(problems) == 6, problems
+    assert {problem.split(":")[0].strip() for problem in problems} == {"model 'm1'", "model 'm2'"}
+
+    # verify_weights keeps failing startup, and its message carries the whole list.
+    with pytest.raises(ServiceConfigurationError) as caught:
+        config.verify_weights(config_dir)
+    assert len(str(caught.value).splitlines()) == 6
+
+
+def test_setup_problems_is_empty_when_everything_exists(tmp_path: Path) -> None:
+    """A fully provisioned machine produces no diagnostics."""
+    service_dir = tmp_path / "svc"
+    path = write_config(service_dir, MINIMAL_BACKEND + MINIMAL_MODEL)
+    make_fake_binary(service_dir)
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(exist_ok=True)
+    for name in ("d.gguf", "v.safetensors", "t.gguf"):
+        (models_dir / name).write_bytes(b"")
+    config, config_dir = load_config(path)
+    assert config.setup_problems(config_dir) == []
+
+
 def test_size_must_be_a_multiple_of_the_model_step() -> None:
     """1000 is not representable by a model that requires multiples of 32."""
     profile = build_profile()
