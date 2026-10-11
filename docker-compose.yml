@@ -1,0 +1,53 @@
+# imagegen — Docker Compose
+#
+#   IMAGEGEN_API_KEYS="$(openssl rand -hex 24)" docker compose up -d --build
+#
+# Populate the weights volume once (about 14.8 GB):
+#
+#   docker compose run --rm fetch-models
+#
+# Switch compute backend without rebuilding:
+#
+#   IMAGEGEN_BACKEND=vulkan docker compose up -d
+#
+# The image contains both engines; IMAGEGEN_BACKEND only repoints a symlink.
+
+services:
+  imagegen:
+    image: imagegen:latest
+    build:
+      context: .
+    restart: unless-stopped
+    ports:
+      - "${IMAGEGEN_PORT:-8080}:8080"
+    environment:
+      # Required. Never put the real key in this file or in the image.
+      IMAGEGEN_API_KEYS: ${IMAGEGEN_API_KEYS:?set IMAGEGEN_API_KEYS, e.g. $(openssl rand -hex 24)}
+      # cuda | vulkan
+      IMAGEGEN_BACKEND: ${IMAGEGEN_BACKEND:-cuda}
+      # `all` so the NVIDIA container runtime mounts the Vulkan ICD and the GL
+      # libraries the ICD dlopens, not just the CUDA driver libraries.
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: all
+    volumes:
+      - imagegen-models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, utility, compute, graphics]
+
+  # One-shot weights downloader. Kept in the same image so the download toolchain
+  # (uv + the Hugging Face CLI) is identical to the one used at build time.
+  fetch-models:
+    image: imagegen:latest
+    profiles: ["tools"]
+    command: ["fetch-models"]
+    volumes:
+      - imagegen-models:/models
+    restart: "no"
+
+volumes:
+  imagegen-models:

@@ -192,6 +192,89 @@ With no keys configured the service is unauthenticated and logs a warning — on
 that on loopback or behind an authenticating proxy. See
 [Authentication](#authentication) for the full picture.
 
+## Docker
+
+One image carries **both** compute backends; which one runs is an environment
+variable, not a rebuild.
+
+### Prerequisites
+
+Docker plus the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+registered with it — `docker info --format '{{.Runtimes}}'` should list `nvidia`.
+The toolkit is required for **both** backends, not just CUDA: it is what mounts the
+driver's Vulkan ICD and GL libraries into the container.
+
+### Build
+
+```bash
+docker build -t imagegen:latest .
+```
+
+The engine is compiled from source inside the image at the pinned commit, using the
+same `scripts/build_engine.sh` as the bare-metal install, so the image cannot drift
+from what the repository pins. `--build-arg CUDA_ARCHITECTURES` defaults to `75`
+(Turing); widen it to `"75;80;86;89;90"` to distribute the image, at the cost of a
+much longer CUDA compile.
+
+### Weights
+
+Never baked in — they are ~14.8 GB and change independently of the code. Put them
+in a volume and fill it once:
+
+```bash
+docker volume create imagegen-models
+docker run --rm -v imagegen-models:/models imagegen:latest fetch-models
+# equivalently: docker compose run --rm fetch-models
+```
+
+### Run
+
+```bash
+IMAGEGEN_API_KEYS="$(openssl rand -hex 24)" docker compose up -d
+```
+
+or without Compose:
+
+```bash
+docker run -d --gpus all \
+  -e IMAGEGEN_API_KEYS="$(openssl rand -hex 24)" \
+  -v imagegen-models:/models -p 8080:8080 \
+  --name imagegen imagegen:latest
+```
+
+### Choosing the backend
+
+```bash
+docker run --gpus all -e IMAGEGEN_BACKEND=vulkan ... imagegen:latest   # default: cuda
+```
+
+The entrypoint repoints `/opt/imagegen/engine/current` at the chosen engine and the
+config always references that symlink, so switching needs neither a rebuild nor a
+config edit. `IMAGEGEN_BACKEND` accepts `cuda` or `vulkan` and rejects anything
+else with exit 2.
+
+### Measured in-container (RTX 2070 8 GB, 512×512, Turbo)
+
+| Backend | Generation time |
+| --- | --- |
+| `cuda` | 19 s |
+| `vulkan` | 32 s |
+
+Both report `stable-diffusion.cpp version master-951-f89d9b1` inside the container,
+`GET /v1/models` lists all three models, and an unauthenticated generation request
+returns 401. Note that only the NVIDIA device is passed into the container, so
+`Vulkan0` there is the RTX 2070 — the iGPU-index trap described under
+[Compute backend](#compute-backend) does not apply.
+
+### Entrypoint commands
+
+| Command | Purpose |
+| --- | --- |
+| `serve` (default) | run the gateway |
+| `fetch-models` | download weights into `/models`; resumable |
+| `doctor` | validate config, list devices |
+| `models` / `plan` | registry, or the exact engine argv |
+
 ## Models
 
 Configured in `config/service.toml`:

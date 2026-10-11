@@ -32,7 +32,13 @@ die() { echo "error: $*" >&2; exit 1; }
 # -DSD_CUDA already sets GGML_CUDA in the engine's CMakeLists, so the GGML option
 # is not passed here. One option per backend keeps the cache readable.
 case "$BACKEND" in
-  cuda)   CMAKE_FLAGS=(-DSD_CUDA=ON);   BUILD_DIR="build" ;;
+  cuda)   CMAKE_FLAGS=(-DSD_CUDA=ON); BUILD_DIR="build"
+          # Without a GPU, nvcc's '-arch=native' falls back to a default that may
+          # not cover the deployment card. Set CUDA_ARCHITECTURES to be explicit
+          # (75 = Turing, 80/86 = Ampere, ...). Unset keeps engine defaults.
+          if [[ -n "${CUDA_ARCHITECTURES:-}" ]]; then
+            CMAKE_FLAGS+=(-DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCHITECTURES")
+          fi ;;
   vulkan) CMAKE_FLAGS=(-DSD_VULKAN=ON); BUILD_DIR="build-vulkan" ;;
   cpu)    CMAKE_FLAGS=();               BUILD_DIR="build-cpu" ;;
   *) die "unknown backend: $BACKEND (choose cuda, vulkan or cpu)" ;;
@@ -110,16 +116,30 @@ cmake --build "$BUILD_PATH" -j"$(nproc)"
 echo
 echo "built:"
 ls -1 "$BUILD_PATH/bin/sd-server" "$BUILD_PATH/bin/sd-cli"
-"$BUILD_PATH/bin/sd-server" --version
 
-# Device indices are what --backend and --max-vram refer to, and their order comes
-# from loader enumeration, not from speed: a laptop that exposes an iGPU as Vulkan0
-# would send a bare `--backend vulkan` to the slow chip. Print them after every
-# build so the index used in config is a deliberate choice.
-echo
-echo "devices this engine can address:"
-"$BUILD_PATH/bin/sd-server" --list-devices
+# Executing the binary proves it is loadable, but it needs the *driver* library
+# (libcuda.so.1, or the Vulkan loader), which a build-only host -- CI, a container
+# build stage -- does not have. The build itself succeeded, so report rather than
+# fail, and say what still needs checking. Everything below depends on being able to
+# run the binary, so it all lives inside this guard.
+if version_output="$("$BUILD_PATH/bin/sd-server" --version 2>&1)"; then
+  echo "$version_output"
 
-echo
-echo "to serve it, set in config/service.toml:"
-echo "  sd_server_binary = \"../third_party/stable-diffusion.cpp/$BUILD_DIR/bin/sd-server\""
+  # Device indices are what --backend and --max-vram refer to, and their order
+  # comes from loader enumeration, not from speed: a laptop that exposes an iGPU as
+  # Vulkan0 would send a bare `--backend vulkan` to the slow chip. Printed after
+  # every build so the index used in config is a deliberate choice.
+  echo
+  echo "devices this engine can address:"
+  "$BUILD_PATH/bin/sd-server" --list-devices
+
+  echo
+  echo "to serve it, set in config/service.toml:"
+  echo "  sd_server_binary = \"../third_party/stable-diffusion.cpp/$BUILD_DIR/bin/sd-server\""
+else
+  echo "warning: built, but could not run sd-server: $version_output" >&2
+  echo "         expected on a host without the GPU driver. Verify the engine on" >&2
+  echo "         the machine that will run it, e.g.:" >&2
+  echo "           $BUILD_PATH/bin/sd-server --version" >&2
+  echo "           $BUILD_PATH/bin/sd-server --list-devices" >&2
+fi

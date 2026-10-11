@@ -1,0 +1,109 @@
+# imagegen — container configuration
+#
+# Same registry as config/service.toml; only the container paths and the bind
+# address differ. Keep the [[models]] blocks in sync with that file — the models
+# themselves are identical, so a change to one belongs in both.
+#
+# sd_server_binary points at the `current` symlink, which the container
+# entrypoint repoints to the CUDA or Vulkan engine on IMAGEGEN_BACKEND.
+
+[service]
+# 0.0.0.0 because the service is reached through a published container port.
+# Set IMAGEGEN_HOST to pin it if you publish to loopback only.
+host = "0.0.0.0"
+port = 8080
+
+# Empty here on purpose: keys come from the environment (IMAGEGEN_API_KEYS) so
+# they never land in a file or an image layer.
+api_keys = []
+
+# Override this when publishing behind a reverse proxy or a different hostname,
+# otherwise response_format="url" advertises an unreachable address.
+public_base_url = "http://localhost:8080"
+
+# A 40-step generation on an 8 GB card takes minutes; the synchronous OpenAI
+# endpoint has to be allowed to wait.
+request_timeout_seconds = 1800
+max_waiting_requests = 4
+blob_ttl_seconds = 3600
+blob_capacity = 64
+
+[backends]
+# Symlink maintained by docker/entrypoint.sh.
+sd_server_binary = "/opt/imagegen/engine/current/bin/sd-server"
+models_dir = "/models"
+
+lifecycle = "on_demand"
+
+# One weight set at a time: each backend holds several gigabytes plus activations.
+# Raise only on a GPU that fits more than one.
+max_resident_backends = 1
+
+idle_timeout_seconds = 300
+start_timeout_seconds = 600
+stop_timeout_seconds = 60
+offload_to_cpu = true
+diffusion_flash_attention = true
+log_level = "info"
+extra_args = []
+
+[[models]]
+id = "qwen-image-2.1"
+description = "Qwen-Image-2.1, 7B single-stream DiT. Highest quality, 40 steps at CFG 6."
+diffusion_model = "qwen_image_2.1-Q4_K.gguf"
+vae = "qwen_image_2.1_vae_bf16.safetensors"
+text_encoder = "Qwen3VL-8B-Instruct-Q4_K_M.gguf"
+vision_encoder = "mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf"
+port = 8111
+supports_editing = true
+default_size = "1024x1024"
+dimension_multiple = 32
+max_pixels = 1048576
+max_images_per_request = 1
+
+[models.sampling]
+steps = 40
+cfg = 6.0
+sample_method = "euler"
+scheduler = "discrete"
+negative_prompt = ""
+
+[[models]]
+id = "qwen-image-2.1-turbo"
+description = "Qwen-Image-2.1-Turbo, distilled 8-step checkpoint at CFG 1 with a fixed sigma schedule."
+diffusion_model = "Qwen-Image-2.1-Turbo-AD-Q4_K.gguf"
+vae = "qwen_image_2.1_vae_bf16.safetensors"
+text_encoder = "Qwen3VL-8B-Instruct-Q4_K_M.gguf"
+vision_encoder = "mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf"
+port = 8112
+supports_editing = true
+default_size = "1024x1024"
+dimension_multiple = 32
+max_pixels = 1048576
+max_images_per_request = 1
+
+[models.sampling]
+steps = 8
+cfg = 1.0
+sample_method = "euler"
+custom_sigmas = [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0.0]
+negative_prompt = ""
+
+[[models]]
+id = "z-image-turbo"
+description = "Z-Image-Turbo, 6B single-stream DiT distilled to 8 steps at CFG 1. ~40% faster than qwen-image-2.1-turbo and Apache-2.0, so it is the only shipped model whose weights allow commercial use. Composes sparse posters well; small lettering is less reliable than the Qwen models, which stay the default for text-heavy work."
+diffusion_model = "z_image_turbo-Q4_K.gguf"
+vae = "ae.safetensors"
+text_encoder = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+port = 8113
+supports_editing = false
+default_size = "1024x1024"
+dimension_multiple = 16
+max_pixels = 1048576
+max_images_per_request = 1
+
+[models.sampling]
+steps = 8
+cfg = 1.0
+sample_method = "euler_a"
+negative_prompt = ""

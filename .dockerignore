@@ -1,0 +1,19 @@
+# Build context hygiene: the image builds the engine from source inside the build
+# stages, so the host's engine checkout, weights and VCS data must never enter it.
+.git
+.gitignore
+models/
+third_party/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+build/
+build-*/
+tests/
+docs/
+*.log
+*.png
+*.jpg
+*.webp

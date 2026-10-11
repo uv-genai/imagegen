@@ -109,6 +109,21 @@ There is no configured linter or formatter; keep to the style already present
    but it garbled at least one caption in 3 of 3 seeds while both Qwen models were
    letter-exact — so do not promote it to "the design model" on the strength of its
    marketing. Its reason for being here is Apache-2.0 and speed.
+9. **The Docker runtime image installs `libegl1`, which looks unnecessary and is
+   not.** The NVIDIA Vulkan ICD `dlopen`s `libEGL.so.1` at runtime, so it is not a
+   `NEEDED` entry and `ldd` will never report it missing. Without it the container
+   fails deep inside the loader with `Could not get 'vkCreateInstance' via
+   'vk_icdGetInstanceProcAddr' for ICD libGLX_nvidia.so.0`. `libx11-6`,
+   `libxext6`, `libglx0` and `libgomp1` (OpenMP, needed by the binaries but absent
+   from the CUDA runtime base) are required for the same reason. Do not trim them as
+   unused packages.
+10. **`build_engine.sh` treats its own verification as best-effort on purpose.**
+    `sd-server --version` and `--list-devices` need the *driver* library
+    (`libcuda.so.1`), which a build-only host — CI, a Docker build stage — does not
+    have. Failing there would break builds that actually succeeded, so the script
+    warns and continues. The real check belongs on the machine that will run it.
+    Relatedly, the CUDA stage passes `CUDA_ARCHITECTURES` because `nvcc`'
+    `-arch=native` cannot detect a card that is not present.
 8. **`cuda` builds into `build/` while `vulkan` and `cpu` build into
    `build-<backend>`.** The asymmetry is intentional: shipped configs reference
    `build/bin/sd-server`, so renaming it would break every existing install for a
