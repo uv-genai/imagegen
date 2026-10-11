@@ -139,3 +139,29 @@ cfg = 1.0
 sample_method = "euler"
 custom_sigmas = [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0.0]
 negative_prompt = ""
+
+[[models]]
+id = "z-image-turbo"
+description = "Z-Image-Turbo, 6B single-stream DiT distilled to 8 steps at CFG 1. ~40% faster than qwen-image-2.1-turbo and Apache-2.0, so it is the only shipped model whose weights allow commercial use. Composes sparse posters well; small lettering is less reliable than the Qwen models, which stay the default for text-heavy work."
+# Z-Image reuses the FLUX.1-schnell autoencoder, hence the bare `ae` file name.
+# Its text encoder is Qwen3-4B-Instruct-2507, not the Qwen3-VL used by
+# Qwen-Image-2.1 -- and that encoder has no vision tower, so this model cannot
+# edit images: supports_editing stays false.
+diffusion_model = "z_image_turbo-Q4_K.gguf"
+vae = "ae.safetensors"
+text_encoder = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+port = 8113
+supports_editing = false
+default_size = "1024x1024"
+# 16, not 32: the DiT patches at 2x2 over an 8x-downsampling VAE.
+dimension_multiple = 16
+max_pixels = 1048576
+max_images_per_request = 1
+
+[models.sampling]
+steps = 8
+cfg = 1.0
+# euler_a is what sd-server picks for a model that is not Flux/SD3/Wan, per
+# `sd-server --help`; the engine's own Z-Image example sets no method at all.
+sample_method = "euler_a"
+negative_prompt = ""

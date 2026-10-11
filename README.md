@@ -86,7 +86,7 @@ uv run imagegen doctor                                  # exit 0 = ready to serv
 uv run imagegen models                                  # registry + sampling defaults
 uv run imagegen plan --model qwen-image-2.1-turbo       # exact sd-server command line
 third_party/stable-diffusion.cpp/build/bin/sd-server --version   # must report the pinned commit
-uv run pytest                                           # 95 tests; the 2 needing weights self-skip
+uv run pytest                                           # 96 tests; the 2 needing weights self-skip
 ```
 
 `sd-server --version` should print `stable-diffusion.cpp version master-951-f89d9b1,
@@ -103,7 +103,7 @@ compute devices reported by sd-server:
 CUDA0  NVIDIA GeForce RTX 2070 with Max-Q Design
 CPU    Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
 
-configuration OK: 2 model(s), lifecycle=on_demand
+configuration OK: 3 model(s), lifecycle=on_demand
 ```
 
 ### If something is missing
@@ -173,10 +173,18 @@ Configured in `config/service.toml`:
 | --- | --- | --- |
 | `qwen-image-2.1` | `leejet/Qwen-Image-2.1-GGUF` `qwen_image_2.1-Q4_K` | 40 steps, CFG 6.0, euler |
 | `qwen-image-2.1-turbo` | `AtomicChat/Qwen-Image-2.1-Turbo-GGUF` `AD-Q4_K` | 8 steps, CFG 1.0, euler, fixed sigmas |
+| `z-image-turbo` | `leejet/Z-Image-Turbo-GGUF` `Q4_K` | 8 steps, CFG 1.0, euler_a |
 
-Shared by both: VAE `Comfy-Org/Qwen-Image-2.1` → `vae/qwen_image_2.1_vae_bf16.safetensors`,
-text encoder `Qwen/Qwen3-VL-8B-Instruct-GGUF` → `Qwen3VL-8B-Instruct-Q4_K_M.gguf`,
-vision tower `mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf` (image editing).
+Shared by the two Qwen models: VAE `Comfy-Org/Qwen-Image-2.1` →
+`vae/qwen_image_2.1_vae_bf16.safetensors`, text encoder
+`Qwen/Qwen3-VL-8B-Instruct-GGUF` → `Qwen3VL-8B-Instruct-Q4_K_M.gguf`, vision tower
+`mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf` (image editing).
+
+Z-Image brings its own set — text encoder
+`unsloth/Qwen3-4B-Instruct-2507-GGUF` `Q4_K_M` and the FLUX.1-schnell autoencoder
+(`ae.safetensors`, mirrored from `Comfy-Org/z_image_turbo` because the upstream
+FLUX repo is gated) — and has no vision tower, so it does not offer editing. Its
+weights are Apache-2.0, unlike the Qwen ones; see [License](#license).
 
 Two things worth knowing before changing quants:
 
@@ -395,6 +403,25 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8080/v1/images
   only, which is enforced by the launcher. Anyone able to reach ports 8111/8112 can
   generate freely and bypass the queue, so those ports must stay local.
 
+### Choosing a model for posters and infographics
+
+Measured with a single prompt — a three-column infographic with a title, three
+column headings and three captions — at 1024×1024, seed 42, on this machine:
+
+| Model | Wall time | Lettering in the output |
+| --- | --- | --- |
+| `qwen-image-2.1-turbo` | 57 s | every string spelled exactly |
+| `qwen-image-2.1` | 462 s | every string spelled exactly |
+| `z-image-turbo` | 34 s warm, 39 s from cold | title and headings exact, but at least one caption garbled in **3 of 3 seeds** (`aromnatic`, `concnetrhaiio`) |
+
+The practical split: **Qwen Turbo is the text-heavy default** — it costs about 20 s
+more than Z-Image and it spells, at the same 8 steps. Z-Image earns its place as the
+fast sketcher: its sparse poster compositions are strong, it loads and runs ~40%
+faster, and it is the only model served here that is Apache-2.0. Treat it as the
+layout comp and Qwen as the final render. This was measured at `Q4_K`; the `Q8_0`
+Denoiser is 2.7 GB larger and was not tested, so quantization may be part of the
+lettering gap.
+
 ## Behaviour measured on an RTX 2070 (8 GB, CPU offload, 512×512)
 
 | Operation | Time |
@@ -404,6 +431,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8080/v1/images
 | base generation, 40 steps | ~88-98 s |
 | edit, base model | ~100 s |
 | model swap (unload + load) | ~2 s |
+| Z-Image generation, 1024×1024 | ~34 s |
 
 Generations are synchronous, so a client that asks for 40 steps at 2 MP must be
 prepared to wait; `service.request_timeout_seconds` bounds it.
@@ -411,7 +439,7 @@ prepared to wait; `service.request_timeout_seconds` bounds it.
 ## Tests
 
 ```bash
-uv run pytest                    # 95 tests: config, translation, HTTP API, process supervision
+uv run pytest                    # 96 tests: config, translation, HTTP API, process supervision
                                  # no GPU needed; the 2 weight-dependent tests skip
 scripts/smoke_test.py --base-url http://127.0.0.1:8080 --api-key "$KEY" \
     --model qwen-image-2.1-turbo --size 512x512
@@ -472,6 +500,11 @@ scripts rather than redistributed here:
   (research or evaluation). Commercial use requires a separate license from the
   licensor. Note also that derivative works may not be named "Qwen" as their
   primary identifier.
+- **The Z-Image-Turbo weights** (`scripts/fetch_models.sh`) — **Apache-2.0**, as are
+  their Qwen3-4B text encoder and FLUX.1-schnell autoencoder. That makes
+  `z-image-turbo` the only model in the shipped registry whose weights permit
+  commercial use, which is the reason it is served alongside the Qwen models
+  despite weaker lettering.
 
 MIT covers this repository's code; it does not relicense the weights, and running
 the service with them commercially still requires the Qwen commercial license.

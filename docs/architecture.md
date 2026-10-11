@@ -41,10 +41,11 @@ inference engine: all sampling happens inside `sd-server` child processes.
                      single GPU, at most max_resident_backends loaded
 ```
 
-The two `sd-server` processes are the ones from `config/service.toml`. They listen
-on loopback only and carry **no credentials**: the gateway is the sole
-authentication boundary, so exposing a backend port directly would be a security
-bug.
+One `sd-server` process is started per model in `config/service.toml` — three as
+shipped: the two Qwen variants and Z-Image-Turbo — and at most
+`max_resident_backends` of them hold weights at once. They listen on loopback only
+and carry **no credentials**: the gateway is the sole authentication boundary, so
+exposing a backend port directly would be a security bug.
 
 ## Why a gateway at all
 

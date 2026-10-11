@@ -73,11 +73,20 @@ def test_base_command_omits_sigma_and_flow_shift(shipped) -> None:
 
 
 def test_weight_paths_are_absolute_and_exist(shipped) -> None:
-    """The engine is handed absolute paths, so it does not depend on the CWD."""
+    """The engine is handed absolute paths, so it does not depend on the CWD.
+
+    `--llm_vision` is only expected where the profile has a vision tower: a
+    text-encoder-only model such as Z-Image-Turbo must not be given the flag.
+    """
     config, config_dir = shipped
     for profile in config.models:
         args = build_server_args(profile, config.backends, config_dir)
-        for flag in ("--diffusion-model", "--vae", "--llm", "--llm_vision"):
+        flags = ["--diffusion-model", "--vae", "--llm"]
+        if profile.supports_editing:
+            flags.append("--llm_vision")
+        else:
+            assert "--llm_vision" not in args, f"{profile.id} has no vision tower to pass"
+        for flag in flags:
             value = args[args.index(flag) + 1]
             assert Path(value).is_absolute(), f"{flag} must be absolute, got {value}"
             if not Path(value).is_file():

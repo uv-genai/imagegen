@@ -45,10 +45,14 @@ sample_method = "euler"
 """
 
 
-def test_shipped_config_loads_and_registers_both_models() -> None:
-    """The config users actually run declares both Qwen-Image-2.1 variants."""
+def test_shipped_config_loads_and_registers_every_model() -> None:
+    """The config users actually run declares each model the service is expected to serve."""
     config, config_dir = load_config(SHIPPED_CONFIG)
-    assert [profile.id for profile in config.models] == ["qwen-image-2.1", "qwen-image-2.1-turbo"]
+    assert [profile.id for profile in config.models] == [
+        "qwen-image-2.1",
+        "qwen-image-2.1-turbo",
+        "z-image-turbo",
+    ]
     assert config_dir == SHIPPED_CONFIG.parent
     assert config.backends.sd_server_binary.endswith("sd-server")
 
@@ -187,6 +191,21 @@ def test_size_must_be_a_multiple_of_the_model_step() -> None:
     """1000 is not representable by a model that requires multiples of 32."""
     profile = build_profile()
     with pytest.raises(ValueError, match="multiple of 32"):
+        profile.validate_size(1000, 1024)
+
+
+def test_z_image_uses_its_own_dimension_step() -> None:
+    """Z-Image patches 2x2 over an 8x VAE, so its step is 16 rather than 32.
+
+    Pinned to the shipped profile because 1008x1008 was generated successfully on a
+    live sd-server; "simplifying" the step back to 32 would reject valid requests.
+    """
+    config, _ = load_config(SHIPPED_CONFIG)
+    profile = config.profile("z-image-turbo")
+    assert profile is not None
+    assert profile.dimension_multiple == 16
+    profile.validate_size(1008, 1008)  # 16 * 63 — valid here, invalid for the Qwen models
+    with pytest.raises(ValueError, match="multiple of 16"):
         profile.validate_size(1000, 1024)
 
 

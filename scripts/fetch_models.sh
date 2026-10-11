@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Download the Qwen-Image-2.1 weight set required by the imagegen service.
+# Download the weight sets required by the models in config/service.toml:
+# Qwen-Image-2.1 (base and Turbo) and Z-Image-Turbo.
 #
 # Every artifact below is pinned to an explicit repository revision so that a
 # rebuilt machine reproduces byte-identical weights. Files already present with
@@ -45,6 +46,15 @@ DOWNLOADS=(
   # Qwen3-VL-8B-Instruct text encoder. The mmproj file is the vision tower,
   # required only for image editing (/v1/images/edits).
   "Qwen/Qwen3-VL-8B-Instruct-GGUF main Qwen3VL-8B-Instruct-Q4_K_M.gguf mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf"
+  # Z-Image-Turbo denoiser: 6B single-stream DiT distilled for 8 steps at CFG 1,
+  # with English and Chinese text rendering as a design goal. Apache-2.0.
+  "leejet/Z-Image-Turbo-GGUF main z_image_turbo-Q4_K.gguf"
+  # Z-Image text encoder: Qwen3-4B-Instruct-2507, not the Qwen3-VL used by
+  # Qwen-Image-2.1. Apache-2.0.
+  "unsloth/Qwen3-4B-Instruct-2507-GGUF main Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+  # Z-Image VAE. It is the FLUX.1-schnell autoencoder, mirrored here by Comfy-Org
+  # because black-forest-labs/FLUX.1-schnell is gated (needs a logged-in token).
+  "Comfy-Org/z_image_turbo main split_files/vae/ae.safetensors"
 )
 
 # Expected sizes in bytes, used as the idempotency check. Verified against the
@@ -55,6 +65,9 @@ declare -A EXPECTED_BYTES=(
   [qwen_image_2.1_vae_bf16.safetensors]=675509688
   [Qwen3VL-8B-Instruct-Q4_K_M.gguf]=5027784800
   [mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf]=752289728
+  [z_image_turbo-Q4_K.gguf]=3864250304
+  [Qwen3-4B-Instruct-2507-Q4_K_M.gguf]=2497281120
+  [ae.safetensors]=335304388
 )
 
 # Returns 0 when the local file exists and matches its expected byte size.

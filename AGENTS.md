@@ -27,7 +27,7 @@ only to build the CUDA engine (`vulkan` needs `glslc`, `cpu` needs neither).
 
 ```bash
 uv sync                                   # install
-uv run pytest                             # 95 tests; launches real subprocesses, no GPU needed
+uv run pytest                             # 96 tests; launches real subprocesses, no GPU needed
 uv run pytest tests/test_api.py -q        # one file
 uv run imagegen doctor --config config/service.toml
 uv run imagegen models
@@ -97,6 +97,18 @@ There is no configured linter or formatter; keep to the style already present
    is correct even if something bypasses the gateway.
 6. **Unknown request parameters are a hard 400.** `IGNORED_REQUEST_FIELDS` is the
    explicit no-op allowlist; do not silently drop unrecognised fields.
+7. **`z-image-turbo` looks mis-configured next to the Qwen entries and is not.**
+   `dimension_multiple = 16` because its DiT patches 2×2 over an 8× VAE (verified
+   with a 1008×1008 request, which is not a multiple of 32); `vae = "ae.safetensors"`
+   because Z-Image reuses the FLUX.1-schnell autoencoder — mirrored from
+   `Comfy-Org/z_image_turbo`, since `black-forest-labs/FLUX.1-schnell` is
+   `gated: auto` and would need a token; and `sample_method = "euler_a"` because
+   that is what `sd-server --help` says it defaults to for anything that is not
+   Flux/SD3/Wan. It has no vision tower, so `supports_editing` must stay false.
+   Measured on this GPU: 34 s at 1024×1024 versus 57 s for `qwen-image-2.1-turbo`,
+   but it garbled at least one caption in 3 of 3 seeds while both Qwen models were
+   letter-exact — so do not promote it to "the design model" on the strength of its
+   marketing. Its reason for being here is Apache-2.0 and speed.
 
 ## Verifying changes
 
