@@ -85,7 +85,7 @@ scripts/fetch_models.sh --dry-run     # lists the files and ~14.8 GB total, writ
 uv run imagegen doctor                                  # exit 0 = ready to serve
 uv run imagegen models                                  # registry + sampling defaults
 uv run imagegen plan --model qwen-image-2.1-turbo       # exact sd-server command line
-uv run pytest                                           # 95 tests, no GPU or weights needed
+uv run pytest                                           # 95 tests; the 2 needing weights self-skip
 ```
 
 `doctor` prints the compute devices the engine sees and lists every missing
@@ -288,6 +288,7 @@ prepared to wait; `service.request_timeout_seconds` bounds it.
 
 ```bash
 uv run pytest                    # 95 tests: config, translation, HTTP API, process supervision
+                                 # no GPU needed; the 2 weight-dependent tests skip
 scripts/smoke_test.py --base-url http://127.0.0.1:8080 --api-key "$KEY" \
     --model qwen-image-2.1-turbo --size 512x512
 ```
