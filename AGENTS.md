@@ -186,6 +186,13 @@ the pin, rebuild, re-run the smoke test, and re-check
 
 - `third_party/` and `models/` are gitignored; never commit weights or the engine.
 - Secrets stay in the environment (`IMAGEGEN_API_KEYS`), never in `config/service.toml`.
+  `.env` is gitignored for exactly this reason; `.env.example` is the committed template
+  and must never hold a real key.
+- `config/container.toml` duplicates the `[[models]]` blocks from
+  `config/service.toml` — only container paths and the bind address differ — so a
+  model change belongs in both. In the image it is baked at
+  `/etc/imagegen/config.toml`; `IMAGEGEN_CONFIG` overrides that path, so a modified
+  config can be bind-mounted read-only instead of rebuilding the image.
 - Tests live in `tests/`, shared helpers in `tests/support.py` (imported as
   `support`, since the tests directory is not a package).
 - Documentation is part of the deliverable: user-facing facts go in `README.md`,

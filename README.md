@@ -275,6 +275,51 @@ config always references that symlink, so switching needs neither a rebuild nor 
 config edit. `IMAGEGEN_BACKEND` accepts `cuda` or `vulkan` and rejects anything
 else with exit 2.
 
+### Configuration
+
+The config baked into the image lives at `/etc/imagegen/config.toml` (built from
+`config/container.toml`). Everything you would normally want to change at runtime
+goes through the environment:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `IMAGEGEN_API_KEYS` | — (Compose requires it) | comma-separated bearer tokens; empty means **no auth** |
+| `IMAGEGEN_BACKEND` | `cuda` | `cuda` or `vulkan`; repoints `engine/current`; any other value exits 2 |
+| `IMAGEGEN_CONFIG` | `/etc/imagegen/config.toml` | which config file to load |
+| `IMAGEGEN_HOST`, `IMAGEGEN_PORT` | from the config file | override the bind address without editing config |
+| `IMAGEGEN_MODELS_DIR` | named volume `imagegen-models` | host directory to bind-mount at `/models` |
+| `NVIDIA_VISIBLE_DEVICES` | `all` | which GPUs the container sees; `all` also gets the Vulkan ICD |
+| `NVIDIA_DRIVER_CAPABILITIES` | `all` (hardcoded in Compose) | must include more than `compute`: the Vulkan ICD and the GL libraries the ICD `dlopen`s ship with the driver |
+| `CUDA_ARCHITECTURES` | build arg, `75` | CUDA architectures to compile for; widen only when distributing |
+
+For anything the table does not cover — the model registry, lifecycle policy,
+timeouts, VRAM budget — mount your own config instead of rebuilding:
+
+```bash
+docker run --gpus all \
+  -e IMAGEGEN_CONFIG=/etc/imagegen/custom.toml \
+  -v "$PWD/my-container.toml:/etc/imagegen/custom.toml:ro" \
+  -v imagegen-models:/models -p 8080:8080 imagegen:latest
+```
+
+The same in Compose:
+
+```yaml
+    volumes:
+      - ./my-container.toml:/etc/imagegen/custom.toml:ro
+    environment:
+      IMAGEGEN_CONFIG: /etc/imagegen/custom.toml
+```
+
+Verified: a mounted config with `port = 8085` makes the gateway listen on 8085 and
+leaves 8080 unused, so the baked file really is being replaced.
+
+Editing `config/container.toml` in the repo works too but needs an image rebuild.
+Note its header: the `[[models]]` blocks are duplicated from
+`config/service.toml`, so a model change belongs in both. To add a model in the
+container without rebuilding, follow [Adding a model](#adding-a-model) and mount
+the result via `IMAGEGEN_CONFIG`.
+
 ### Measured in-container (RTX 2070 8 GB, 512×512, Turbo)
 
 | Backend | Generation time |
