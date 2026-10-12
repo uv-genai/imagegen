@@ -240,7 +240,7 @@ public_base_url = "http://192.168.1.181:8080"
 
 `b64_json` responses are unaffected.
 
-### Docker
+### Docker (port publishing)
 
 The container already binds `0.0.0.0` (`config/container.toml`). What decides
 external reachability is how the port is **published**:
@@ -269,7 +269,7 @@ Measured:
 ```
 
 `public_base_url` applies here too; see
-[Configuration](#configuration) for replacing the baked config without a rebuild.
+[Container configuration](#container-configuration) for replacing the baked config without a rebuild.
 
 ### Before exposing on a routable interface
 
@@ -287,7 +287,7 @@ Measured:
 One image carries **both** compute backends; which one runs is an environment
 variable, not a rebuild.
 
-### Prerequisites
+### Docker prerequisites
 
 Docker plus the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 registered with it — `docker info --format '{{.Runtimes}}'` should list `nvidia`.
@@ -339,7 +339,7 @@ IMAGEGEN_API_KEYS=your-key
 IMAGEGEN_BACKEND=cuda
 ```
 
-### Run
+### Run the container
 
 ```bash
 IMAGEGEN_API_KEYS="$(openssl rand -hex 24)" docker compose up -d
@@ -365,7 +365,7 @@ config always references that symlink, so switching needs neither a rebuild nor 
 config edit. `IMAGEGEN_BACKEND` accepts `cuda` or `vulkan` and rejects anything
 else with exit 2.
 
-### Configuration
+### Container configuration
 
 The config baked into the image lives at `/etc/imagegen/config.toml` (built from
 `config/container.toml`). Everything you would normally want to change at runtime
@@ -435,6 +435,67 @@ returns 401. Note that only the NVIDIA device is passed into the container, so
 | `fetch-models` | download weights into `/models`; resumable |
 | `doctor` | validate config, list devices |
 | `models` / `plan` | registry, or the exact engine argv |
+
+## Configuration reference
+
+Three TOML tables drive the service. Every table is strict (`extra="forbid"`), so an
+unknown key is a named startup error rather than a silent no-op — a quietly ignored
+sampling value produces wrong images that look like the model's fault.
+
+Two files ship: `config/service.toml` (bare metal, loopback) and
+`config/container.toml` (container paths, `0.0.0.0`). Their `[[models]]` blocks are
+duplicated, so a model change belongs in both.
+
+### `[service]`
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `host` | `"127.0.0.1"` | bind address; `IMAGEGEN_HOST` overrides. See [Network exposure](#network-exposure) |
+| `port` | `8080` | bind port; `IMAGEGEN_PORT` overrides (1–65535) |
+| `api_keys` | `[]` | accepted bearer tokens — **empty disables authentication**. Prefer `IMAGEGEN_API_KEYS` so keys never land in a file |
+| `public_base_url` | `null` | base URL advertised by `response_format="url"`; requests for URLs fail with a clear 400 when unset. **No environment override** |
+| `request_timeout_seconds` | `1800` | how long a synchronous generation may run before the gateway gives up |
+| `max_waiting_requests` | `8` | requests allowed to queue behind a generation; beyond this, new requests are rejected rather than queued |
+| `blob_ttl_seconds` | `3600` | how long an image is held in RAM for its response URL |
+| `blob_capacity` | `64` | maximum number of stored response images; oldest evicted first |
+
+### `[backends]`
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `sd_server_binary` | **required** | path to the `sd-server` executable |
+| `models_dir` | **required** | directory holding weights; the weight names in `[[models]]` resolve against it, relative to the config file |
+| `lifecycle` | `"on_demand"` | `on_demand` starts a backend the first time its model is requested; `eager` starts every configured model at boot |
+| `max_resident_backends` | `1` | how many weight sets may be loaded at once. Each Qwen backend holds ~9.7 GB of weights plus activations, so this stays at 1 on an 8 GB card and is raised only where it genuinely fits |
+| `idle_timeout_seconds` | `300` | unload a backend after this long without requests |
+| `start_timeout_seconds` | `600` | how long to wait for a backend to report ready — loading is gigabytes |
+| `stop_timeout_seconds` | `30` | grace period for a clean backend shutdown before it is killed |
+| `offload_to_cpu` | `true` | pass `--offload-to-cpu`, keeping part of the weights in system RAM |
+| `diffusion_flash_attention` | `true` | pass `--diffusion-fa` |
+| `max_vram_gib` | `null` | per-device budget handed to `--max-vram`. Leave unset to let the engine auto-fit; set it when other processes share the GPU |
+| `log_level` | `"info"` | `debug` \| `verbose` \| `info` \| `warn` \| `error` |
+| `extra_args` | `[]` | appended **verbatim to every** `sd-server` command line — never use it for a per-model flag, which needs a `ModelProfile` field |
+
+### `[[models]]` and `[models.sampling]`
+
+Covered by [Adding a model](#adding-a-model), which lists all 13 model keys and
+all 7 sampling keys with required/optional status and defaults. The same list is
+repeated in the banner above `[[models]]` in `config/service.toml`.
+
+### What can be overridden from the environment
+
+Only three keys, deliberately the ones that must stay out of files:
+
+| Variable | Overrides |
+| --- | --- |
+| `IMAGEGEN_API_KEYS` | `service.api_keys` |
+| `IMAGEGEN_HOST` | `service.host` |
+| `IMAGEGEN_PORT` | `service.port` |
+
+Everything else is file-only — notably `public_base_url`. The container adds two of
+its own, read by the entrypoint rather than the service: `IMAGEGEN_CONFIG` (which
+file to load) and `IMAGEGEN_BACKEND` (which engine the `current` symlink points
+at). See [Container configuration](#container-configuration).
 
 ## Models
 
