@@ -1,6 +1,6 @@
 [project]
 name = "imagegen"
-version = "0.1.4"
+version = "0.1.5"
 description = "OpenAI-compatible image generation service backed by stable-diffusion.cpp and Qwen-Image-2.1"
 requires-python = ">=3.12"
 dependencies = [
