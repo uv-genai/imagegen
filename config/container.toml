@@ -8,7 +8,12 @@
 # entrypoint repoints to the CUDA or Vulkan engine on IMAGEGEN_BACKEND.
 
 [service]
-# 0.0.0.0 because the service is reached through a published container port.
+# 0.0.0.0 because the service is reached through a published container port --
+# binding loopback inside the container would make it unreachable from the host.
+# External reachability is then decided by how the port is published:
+#   -p 8080:8080                  all host interfaces (LAN-reachable)
+#   -p 127.0.0.1:8080:8080       loopback only
+#   --network host                the app's own bind, no NAT
 # Set IMAGEGEN_HOST to pin it if you publish to loopback only.
 host = "0.0.0.0"
 port = 8080
@@ -18,7 +23,9 @@ port = 8080
 api_keys = []
 
 # Override this when publishing behind a reverse proxy or a different hostname,
-# otherwise response_format="url" advertises an unreachable address.
+# otherwise response_format="url" advertises an unreachable address. There is no
+# environment override for it -- replace this file (IMAGEGEN_CONFIG plus a
+# read-only bind mount) to change it without rebuilding the image.
 public_base_url = "http://localhost:8080"
 
 # A 40-step generation on an 8 GB card takes minutes; the synchronous OpenAI

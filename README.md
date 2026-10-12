@@ -186,11 +186,101 @@ uv run imagegen serve --config config/service.toml
 | Variable | Effect |
 | --- | --- |
 | `IMAGEGEN_API_KEYS` | comma-separated bearer tokens; overrides `service.api_keys` |
-| `IMAGEGEN_HOST`, `IMAGEGEN_PORT` | override the bind address |
+| `IMAGEGEN_HOST`, `IMAGEGEN_PORT` | override the bind address (default `127.0.0.1:8080`; see [Network exposure](#network-exposure) to listen publicly) |
 
 With no keys configured the service is unauthenticated and logs a warning — only do
 that on loopback or behind an authenticating proxy. See
 [Authentication](#authentication) for the full picture.
+
+## Network exposure
+
+The bare-metal config defaults to **loopback only**; the container config binds
+`0.0.0.0`. That asymmetry is deliberate — a container is reached through a
+published port, so binding loopback inside it would make it unreachable.
+
+### Bare metal
+
+`config/service.toml` ships `host = "127.0.0.1"`. To listen on every interface:
+
+```bash
+IMAGEGEN_HOST=0.0.0.0 IMAGEGEN_API_KEYS="$(openssl rand -hex 24)" \
+  uv run imagegen serve --config config/service.toml
+```
+
+or set it in the file:
+
+```toml
+[service]
+host = "0.0.0.0"
+```
+
+`imagegen serve` accepts **only** `--config` — there are no `--host` or `--port`
+flags. The complete set of environment overrides is `IMAGEGEN_API_KEYS`,
+`IMAGEGEN_PORT` and `IMAGEGEN_HOST` (`src/imagegen/cli.py`).
+
+Measured:
+
+```
+IMAGEGEN_HOST=0.0.0.0 IMAGEGEN_PORT=8096
+  Uvicorn running on http://0.0.0.0:8096
+  ss -tlnp            LISTEN 0.0.0.0:8096
+  loopback /health                        200
+  LAN IP (192.168.1.181) /health        200
+  POST /v1/images/generations, no key   401
+```
+
+**`public_base_url` has no environment override.** `service.toml` sets it to
+`http://127.0.0.1:8080`, so as soon as you listen publicly, `response_format="url"`
+hands remote clients an address that points back at their own machine. Edit the key
+to the address they actually use:
+
+```toml
+public_base_url = "http://192.168.1.181:8080"
+```
+
+`b64_json` responses are unaffected.
+
+### Docker
+
+The container already binds `0.0.0.0` (`config/container.toml`). What decides
+external reachability is how the port is **published**:
+
+| Form | Host bind | Reachable from |
+| --- | --- | --- |
+| `-p 8080:8080` | `0.0.0.0` and `[::]` | anywhere on the network |
+| `-p 127.0.0.1:8080:8080` | loopback only | this machine only |
+| `--network host` | the app's own bind, no NAT | anywhere (Linux only) |
+
+`docker-compose.yml` publishes `"${IMAGEGEN_PORT:-8080}:8080"` with no address
+prefix, so **all host interfaces** by default:
+
+```bash
+IMAGEGEN_API_KEYS="$(openssl rand -hex 24)" docker compose up -d   # LAN-reachable
+```
+
+Measured:
+
+```
+-p 8092:8080             host listens 0.0.0.0:8092 and [::]:8092
+                         http://192.168.1.181:8092/health -> 200
+-p 127.0.0.1:8093:8080   host listens 127.0.0.1:8093
+                         loopback 200, LAN IP refused
+--network host, port 8094  host listens 0.0.0.0:8094, LAN IP 200
+```
+
+`public_base_url` applies here too; see
+[Configuration](#configuration) for replacing the baked config without a rebuild.
+
+### Before exposing on a routable interface
+
+1. **Set keys.** Empty `IMAGEGEN_API_KEYS` means unauthenticated. A
+   GPU-exhausting endpoint reachable from the LAN is a denial-of-service
+   invitation; `max_waiting_requests` bounds the queue but does not remove it.
+2. **Fix `public_base_url`**, or `response_format="url"` returns unreachable links.
+3. **Put a TLS-terminating reverse proxy in front of it.** The bearer token travels
+   in a header and is sniffable over plaintext HTTP.
+4. **Keep the engine on loopback.** `sd-server` has no credentials and the gateway
+   is the only authenticating layer — never publish backend ports directly.
 
 ## Docker
 
@@ -291,6 +381,10 @@ goes through the environment:
 | `NVIDIA_VISIBLE_DEVICES` | `all` | which GPUs the container sees; `all` also gets the Vulkan ICD |
 | `NVIDIA_DRIVER_CAPABILITIES` | `all` (hardcoded in Compose) | must include more than `compute`: the Vulkan ICD and the GL libraries the ICD `dlopen`s ship with the driver |
 | `CUDA_ARCHITECTURES` | build arg, `75` | CUDA architectures to compile for; widen only when distributing |
+
+For how publishing works — the difference between `-p 8080:8080`,
+`-p 127.0.0.1:8080:8080` and `--network host` — see
+[Network exposure](#network-exposure).
 
 For anything the table does not cover — the model registry, lifecycle policy,
 timeouts, VRAM budget — mount your own config instead of rebuilding:

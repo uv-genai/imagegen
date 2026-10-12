@@ -199,3 +199,31 @@ through `GET /health/backends`.
 - **One GPU per deployment.** Multi-GPU means running several gateway instances,
   one per GPU, behind a load balancer; `--backend`/`--split-mode` device pinning is
   reachable through `backends.extra_args` but is not modelled in the config.
+
+## Network topology and trust boundary
+
+Three sockets are involved, and only one of them is ever authenticated:
+
+```
+client ──(bearer token)──> gateway :8080 ──(no credentials)──> sd-server :811x on 127.0.0.1
+```
+
+- **The gateway is the only authenticating layer.** `sd-server` has no credentials
+  at all, so the backends' loopback binding (`--listen-ip 127.0.0.1`) *is* the
+  security boundary for the engine. Publishing a backend port directly exposes an
+  unauthenticated GPU to whoever can reach it.
+- **Bare metal defaults to `127.0.0.1`** so that installing the service is not
+  silently also a decision to share the GPU with the network. Listening publicly is
+  an explicit operator action — `IMAGEGEN_HOST=0.0.0.0`, or editing
+  `service.toml` — and it then requires setting `public_base_url` to match. That
+  key has no environment override on purpose: an advertised URL that disagrees with
+  the address clients actually use is worse than no URL at all.
+- **The container binds `0.0.0.0`** because it is reached through a published
+  port; loopback inside a network namespace means nothing to the host. Whether it
+  is reachable beyond the host is decided by the publish form — `-p 8080:8080` for
+  every host interface, `-p 127.0.0.1:8080:8080` for loopback only, or
+  `--network host` to drop NAT and use the app's own bind directly.
+- **TLS is out of scope for the service.** The bearer token travels in a header and
+  is sniffable over plaintext HTTP, so terminate TLS at a reverse proxy. That proxy
+  is also where tenancy belongs if tenancy is needed, since the service itself only
+  knows a flat list of keys.

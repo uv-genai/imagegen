@@ -19,6 +19,10 @@ services:
       context: .
     restart: unless-stopped
     ports:
+      # No address prefix, so this publishes on ALL host interfaces (0.0.0.0 and
+      # [::]) and is reachable from the network. For loopback only, use:
+      #   "127.0.0.1:${IMAGEGEN_PORT:-8080}:8080"
+      # Remember to set public_base_url in the config to the address clients use.
       - "${IMAGEGEN_PORT:-8080}:8080"
     environment:
       # Required. Never put the real key in this file or in the image.

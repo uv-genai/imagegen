@@ -19,3 +19,7 @@ third_party/
 .env
 .env.*
 !.env.example
+
+# Local session transcripts; this repo is public, do not commit them.
+pi-session-*.html
+*.session.html

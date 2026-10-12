@@ -130,8 +130,25 @@ There is no configured linter or formatter; keep to the style already present
    cosmetic win. Engines coexist because each backend has its own directory, and
    the script refuses to reconfigure one whose CMake cache names a different
    backend — that is how a working engine gets silently replaced.
+11. **`imagegen serve` takes only `--config` — there is no `--host` or `--port`.**
+    The bind address changes via `IMAGEGEN_HOST` / `IMAGEGEN_PORT`, and the complete
+    set of environment overrides is `IMAGEGEN_API_KEYS`, `IMAGEGEN_PORT`,
+    `IMAGEGEN_HOST` (`src/imagegen/cli.py`). **`public_base_url` is not among
+    them**, and that is the trap: exposing the service on a LAN address without
+    editing `public_base_url` makes `response_format="url"` return links that point
+    back at the caller.
+12. **`service.toml` binds `127.0.0.1` while `container.toml` binds `0.0.0.0`, and
+    both are correct.** A container is reached through a published port, so binding
+    loopback inside it would make it unreachable; bare metal should not advertise
+    the GPU to the network unless the operator chose to. Do not "align" them.
 
 ## Verifying changes
+
+- **When verifying a bind address, confirm the listener is yours.** `ss -tlnp`
+  reports the pid and command — read them. A leftover gateway on `127.0.0.1:8080`
+  once made a `--network host` container look as if it had bound loopback, when the
+  container had actually failed on a port conflict and the socket belonged to
+  another process. Prefer a fresh, unused port for these tests.
 
 - Changes to the translation layer must be checked against a **live** `sd-server`,
   not only the stub: `scripts/smoke_test.py`, and for edits, confirm the output

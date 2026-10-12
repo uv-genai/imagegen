@@ -4,6 +4,11 @@
 # `../models` is the models/ directory at the repository root.
 
 [service]
+# Loopback by default: nothing outside this machine can reach the GPU unless you
+# change it. To listen on every interface, set host = "0.0.0.0" here or launch
+# with IMAGEGEN_HOST=0.0.0.0 -- `imagegen serve` takes only --config, there are no
+# --host/--port flags. If you expose it, update public_base_url below to match:
+# it has no environment override.
 host = "127.0.0.1"
 port = 8080
 
@@ -14,6 +19,9 @@ api_keys = []
 
 # Advertised base URL for response_format="url". Requests for URLs fail with a
 # clear 400 when this is unset, because a half-configured URL would be useless.
+# There is NO environment override for this key: when you bind to 0.0.0.0, edit it
+# to the address clients actually use (LAN IP or hostname), or remote callers get
+# a URL pointing back at their own machine.
 public_base_url = "http://127.0.0.1:8080"
 
 # A generation on a consumer GPU with CPU-offloaded weights takes minutes, not
