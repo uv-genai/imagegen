@@ -4,7 +4,9 @@
 # The engine is pinned to one exact commit rather than a moving branch, because
 # Qwen-Image-2.1 sigma handling changed as recently as 2026-10-06 (commit
 # c150a6b fixed custom sigma lists) and a silent upgrade must not change the
-# pictures this service produces.
+# pictures this service produces. Pin bumps are deliberate: MOSS-Image and
+# FLUX.3 Image Klein support (68285df, 8cd731e) landed after f89d9b1, which
+# forced the last upgrade to 0518b34.
 #
 # The clone is *blobless* (--filter=blob:none): full commit history, file
 # contents fetched on checkout. That costs ~1.5 s and ~400 MB and makes the pin
@@ -22,7 +24,7 @@
 set -euo pipefail
 
 BACKEND="${1:-cuda}"
-PINNED_COMMIT="f89d9b13d730eabeede7314ce49dacd18d3c90c2"
+PINNED_COMMIT="0518b34374761cb82aeda5ad3c2f0686fdad2cec"
 REPO_URL="https://github.com/leejet/stable-diffusion.cpp.git"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC_DIR="$ROOT/third_party/stable-diffusion.cpp"

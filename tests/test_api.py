@@ -552,10 +552,10 @@ async def test_edit_strength_out_of_range_is_rejected(
     assert "strength" in response.json()["error"]["message"]
 
 
-async def test_edit_is_refused_for_model_without_vision_encoder(
+async def test_edit_is_refused_for_model_without_editing_enabled(
     client: httpx.AsyncClient, auth_headers: dict[str, str]
 ) -> None:
-    """A backend launched without --llm_vision cannot see the reference image."""
+    """supports_editing=false means reference images would be ignored."""
     response = await client.post(
         "/v1/images/edits",
         data={"model": "test-turbo", "prompt": "edit me"},
@@ -563,4 +563,4 @@ async def test_edit_is_refused_for_model_without_vision_encoder(
         headers=auth_headers,
     )
     assert response.status_code == 400
-    assert "vision encoder" in response.json()["error"]["message"]
+    assert "supports_editing=false" in response.json()["error"]["message"]

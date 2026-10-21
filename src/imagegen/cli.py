@@ -60,6 +60,9 @@ def _cmd_models(args: argparse.Namespace) -> int:
     config, _ = _load(args.config)
     for profile in config.models:
         sigmas = "backend default" if not profile.sampling.custom_sigmas else f"{len(profile.sampling.custom_sigmas)} sigmas"
+        editing = "yes" if profile.supports_editing else "no"
+        if profile.supports_editing and profile.vision_encoder:
+            editing += f" (vision tower {profile.vision_encoder})"
         print(f"{profile.id}")
         print(f"  description   {profile.description or '-'}")
         print(f"  sampling      {profile.sampling.steps} steps, cfg {profile.sampling.cfg}, "
@@ -67,7 +70,8 @@ def _cmd_models(args: argparse.Namespace) -> int:
         print(f"  weights       {profile.diffusion_model}")
         print(f"  vae           {profile.vae}")
         print(f"  text encoder  {profile.text_encoder}")
-        print(f"  vision tower  {profile.vision_encoder or '- (editing disabled)'}")
+        print(f"  tokenizer     {profile.tokenizer or '- (embedded)'}")
+        print(f"  editing       {editing}")
         print(f"  backend port  {profile.port}")
         print(f"  size          default {profile.default_size}, max {profile.max_pixels} px, "
               f"multiple of {profile.dimension_multiple}")

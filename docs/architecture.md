@@ -79,7 +79,7 @@ C++ surface at zero and inherits upstream model support as it lands.
 
 Readiness is not "the port answers": a loaded engine is recognised by a
 capabilities report containing both `supported_modes` and `model`
-(verified against `sd-server` `master-951-f89d9b1`). A process that exits during
+(verified against `sd-server` `master-951-f89d9b1-31-g0518b34`). A process that exits during
 load is reported immediately instead of burning the whole start timeout.
 
 ### Single residency and swapping

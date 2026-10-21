@@ -27,11 +27,14 @@ logger = logging.getLogger("imagegen.backend")
 BACKEND_HOST = "127.0.0.1"
 
 #: Keys present in a capabilities report only once the engine has finished
-#: building it. Verified against sd-server master-951-f89d9b1, whose
+#: building it. Verified against sd-server master-951-f89d9b1-31-g0518b34, whose
 #: ``GET /sdcpp/v1/capabilities`` answers with ``current_mode``, ``defaults``,
-#: ``features``, ``limits``, ``loras``, ``model``, ``output_formats``,
-#: ``preview_modes``, ``samplers``, ``schedulers``, ``supported_modes``,
-#: ``upscale`` and ``upscalers``. There is no ``models`` key.
+#: ``defaults_by_mode``, ``features``, ``features_by_mode``, ``generation_features``,
+#: ``limits``, ``loras``, ``model``, ``output_formats``, ``output_formats_by_mode``,
+#: ``preview_modes``, ``runtime``, ``samplers``, ``schedulers``, ``supported_modes``,
+#: ``upscale`` and ``upscalers``. There is no ``models`` key. ``supported_modes``
+#: lists generation modes (``img_gen``/``vid_gen``), NOT editing: flux3 edits are
+#: accepted although its report says only ``img_gen``.
 CAPABILITY_READY_KEYS = ("supported_modes", "model")
 
 
@@ -74,6 +77,8 @@ def build_server_args(
     ]
     if profile.supports_editing and profile.vision_encoder is not None:
         args += ["--llm_vision", str(resolve(config_dir, profile.vision_encoder))]
+    if profile.tokenizer is not None:
+        args += ["--tokenizer", str(resolve(config_dir, profile.tokenizer))]
     if settings.offload_to_cpu:
         args.append("--offload-to-cpu")
     if settings.diffusion_flash_attention:

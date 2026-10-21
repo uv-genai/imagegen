@@ -64,7 +64,7 @@ cd imagegen
 
 uv sync                        # 1. the service: deps + venv          (seconds)
 scripts/build_engine.sh cuda   # 2. the inference engine              (~10 min)
-scripts/fetch_models.sh        # 3. the weights, ~14.8 GB, resumable  (network-bound)
+scripts/fetch_models.sh        # 3. the weights, ~31.7 GB, resumable  (network-bound)
 uv run imagegen doctor         # 4. verify binary, weights and devices
 ```
 
@@ -76,7 +76,7 @@ one pinned commit (~400 MB, blobless) into `third_party/`; step 3 writes to
 Peek before committing to the download:
 
 ```bash
-scripts/fetch_models.sh --dry-run     # lists the files and ~14.8 GB total, writes nothing
+scripts/fetch_models.sh --dry-run     # lists the files and ~31.7 GB total, writes nothing
 ```
 
 ### Compute backend
@@ -113,11 +113,11 @@ uv run imagegen doctor                                  # exit 0 = ready to serv
 uv run imagegen models                                  # registry + sampling defaults
 uv run imagegen plan --model qwen-image-2.1-turbo       # exact sd-server command line
 third_party/stable-diffusion.cpp/build/bin/sd-server --version   # must report the pinned commit
-uv run pytest                                           # 96 tests; the 2 needing weights self-skip
+uv run pytest                                           # 100 tests; the 2 needing weights self-skip
 ```
 
-`sd-server --version` should print `stable-diffusion.cpp version master-951-f89d9b1,
-commit f89d9b1`. That is the commit this service was built and measured against;
+`sd-server --version` should print `stable-diffusion.cpp version master-951-f89d9b1-31-g0518b34,
+commit 0518b34`. That is the commit this service was built and measured against;
 `PINNED_COMMIT` in `scripts/build_engine.sh` is the one place to change it. If the
 version differs, the engine was built from something else and the results below do
 not apply.
@@ -130,7 +130,7 @@ compute devices reported by sd-server:
 CUDA0  NVIDIA GeForce RTX 2070 with Max-Q Design
 CPU    Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
 
-configuration OK: 3 model(s), lifecycle=on_demand
+configuration OK: 5 model(s), lifecycle=on_demand
 ```
 
 ### If something is missing
@@ -308,7 +308,7 @@ much longer CUDA compile.
 
 ### Weights
 
-Never baked in — they are ~14.8 GB and change independently of the code. Put them
+Never baked in — they are ~31.7 GB and change independently of the code. Put them
 in a volume and fill it once:
 
 ```bash
@@ -427,6 +427,12 @@ returns 401. Note that only the NVIDIA device is passed into the container, so
 `Vulkan0` there is the RTX 2070 — the iGPU-index trap described under
 [Compute backend](#compute-backend) does not apply.
 
+These numbers were measured on the `f89d9b1` engine and a three-model image; the
+shipped image predates both the `0518b34` pin bump and the MOSS/FLUX.3 entries now
+in `config/container.toml`. Rebuilding (`docker build`) picks up both — the engine
+is compiled from the pinned commit at build time — so re-run the table above after
+rebuilding rather than quoting it for a newer image.
+
 ### Entrypoint commands
 
 | Command | Purpose |
@@ -478,7 +484,7 @@ duplicated, so a model change belongs in both.
 
 ### `[[models]]` and `[models.sampling]`
 
-Covered by [Adding a model](#adding-a-model), which lists all 13 model keys and
+Covered by [Adding a model](#adding-a-model), which lists all 14 model keys and
 all 7 sampling keys with required/optional status and defaults. The same list is
 repeated in the banner above `[[models]]` in `config/service.toml`.
 
@@ -506,6 +512,8 @@ Configured in `config/service.toml`:
 | `qwen-image-2.1` | `leejet/Qwen-Image-2.1-GGUF` `qwen_image_2.1-Q4_K` | 40 steps, CFG 6.0, euler |
 | `qwen-image-2.1-turbo` | `AtomicChat/Qwen-Image-2.1-Turbo-GGUF` `AD-Q4_K` | 8 steps, CFG 1.0, euler, fixed sigmas |
 | `z-image-turbo` | `leejet/Z-Image-Turbo-GGUF` `Q4_K` | 8 steps, CFG 1.0, euler_a |
+| `moss-image` | `realrebelai/MOSS-Image_GGUFs` `SFT-Q5_K_M` | 20 steps, CFG 3.0, euler, shift 5 |
+| `flux-3-image-klein` | `unsloth/flux-3-image-klein-GGUF` `Q5_K_M` | 16 steps, CFG 1.0, euler, shift 6.93 |
 
 Shared by the two Qwen models: VAE `Comfy-Org/Qwen-Image-2.1` →
 `vae/qwen_image_2.1_vae_bf16.safetensors`, text encoder
@@ -517,6 +525,22 @@ Z-Image brings its own set — text encoder
 (`ae.safetensors`, mirrored from `Comfy-Org/z_image_turbo` because the upstream
 FLUX repo is gated) — and has no vision tower, so it does not offer editing. Its
 weights are Apache-2.0, unlike the Qwen ones; see [License](#license).
+
+MOSS-Image SFT and FLUX.3 Image Klein share the **FLUX.2 VAE**
+(`flux2-vae.safetensors`, mirrored ungated from `Comfy-Org/MOSS-Image`; the BFL
+repo is gated). MOSS pairs a 5B denoiser with the Qwen3.5-9B text encoder and an
+**external `tokenizer.json`** — Qwen3.5's vocabulary is not embedded in sd.cpp, so
+the `tokenizer` config key is what makes this model servable. FLUX.3 Klein pairs
+a 4B distilled denoiser with Qwen3-VL-4B and is the fastest model here at
+1024×1024; unlike the Qwen models, its edits use the `flux2` preset, which sends
+reference images to the DiT through the VAE and therefore needs no vision tower.
+
+**Which model for what:** both Qwen models remain the default for text-heavy
+graphics (measured letter-exact at 1024×1024); Z-Image is the fast sketcher;
+FLUX.3 Klein is the fastest model here and edits images; MOSS has the strongest
+prompt adherence of the set at 20 steps but the slowest prompt encoding (9B
+text encoder). See [Choosing a model for posters and
+infographics](#choosing-a-model-for-posters-and-infographics).
 
 Two things worth knowing before changing quants:
 
@@ -546,8 +570,9 @@ unsupported key is a startup error naming that key, never a silent no-op.
 | `max_pixels` | yes | — | Ceiling on `width * height` |
 | `sampling` | yes | — | `[models.sampling]` table, below |
 | `description` | no | `""` | Shown by `imagegen models` |
-| `vision_encoder` | no | none | mmproj tower needed for editing |
-| `supports_editing` | no | `false` | Offers `/v1/images/edits`; **requires `vision_encoder`** |
+| `vision_encoder` | no | none | mmproj tower; only VLM-based edit presets (qwen) need it |
+| `tokenizer` | no | none | External `tokenizer.json` when the vocabulary is not embedded in sd.cpp (MOSS/Qwen3.5) |
+| `supports_editing` | no | `false` | Offers `/v1/images/edits`; the tower is passed as `--llm_vision` only when `vision_encoder` is also set |
 | `dimension_multiple` | no | `32` | Width and height must be multiples of it |
 | `max_images_per_request` | no | `1` | 1..8 |
 
@@ -568,7 +593,10 @@ something talks to `sd-server` directly:
 `id`, `description`, `default_size`, `max_pixels` and `dimension_multiple` are
 gateway-side policy: they validate requests and never reach the command line.
 `supports_editing` is the exception that does change the process — the vision tower
-is only passed as `--llm_vision` when it is true.
+is passed as `--llm_vision` only when it is true *and* `vision_encoder` is set.
+The two are deliberately independent: the `flux2`/`flux3` edit preset routes
+reference images through the VAE, so `flux-3-image-klein` edits with no tower at
+all (verified: an edit request to it succeeds and the output changes).
 
 Weight paths are **file names resolved against `[backends].models_dir`**, which is
 itself relative to the config file, so a checkout stays relocatable. Files must end
@@ -745,16 +773,24 @@ column headings and three captions — at 1024×1024, seed 42, on this machine:
 | `qwen-image-2.1-turbo` | 57 s | every string spelled exactly |
 | `qwen-image-2.1` | 462 s | every string spelled exactly |
 | `z-image-turbo` | 34 s warm, 39 s from cold | title and headings exact, but at least one caption garbled in **3 of 3 seeds** (`aromnatic`, `concnetrhaiio`) |
+| `flux-3-image-klein` | 66 s | every string spelled exactly; layout left the bottom half empty and the three icons were interchangeable vessels rather than a dripper, press and cup |
+| `moss-image` | 179 s | every string spelled exactly, correct icons, composition fills the frame — the strongest of the five, at the highest cost |
 
 The practical split: **Qwen Turbo is the text-heavy default** — it costs about 20 s
-more than Z-Image and it spells, at the same 8 steps. Z-Image earns its place as the
-fast sketcher: its sparse poster compositions are strong, it loads and runs ~40%
-faster, and it is the only model served here that is Apache-2.0. Treat it as the
-layout comp and Qwen as the final render. This was measured at `Q4_K`; the `Q8_0`
-Denoiser is 2.7 GB larger and was not tested, so quantization may be part of the
-lettering gap.
+more than Z-Image and it spells, at the same 8 steps. Flux3 Klein matched Qwen
+Turbo on spelling in its single run with a much simpler layout; MOSS is the
+quality ceiling (letter-exact *and* right icons) but takes 3× longer than Turbo
+for it. Z-Image earns its place as the fast sketcher: its sparse poster
+compositions are strong, it loads and runs ~40% faster, and it is Apache-2.0
+alongside MOSS. Treat it as the layout comp and Qwen as the final render. This was
+measured at `Q4_K` for the older denoisers (the two new models at `Q5_K_M`); the
+`Q8_0` Denoiser is 2.7 GB larger and was not tested, so quantization may be part
+of the lettering gap.
 
-## Behaviour measured on an RTX 2070 (8 GB, CPU offload, 512×512)
+The two new models have **one run each** of this prompt, versus three seeds for
+Z-Image — treat their rows as indicative, not settled.
+
+## Behaviour measured on an RTX 2070 (8 GB, CPU offload, 512×512 unless noted)
 
 | Operation | Time |
 | --- | --- |
@@ -764,6 +800,18 @@ lettering gap.
 | edit, base model | ~100 s |
 | model swap (unload + load) | ~2 s |
 | Z-Image generation, 1024×1024 | ~34 s |
+| flux3 generation, 16 steps, 1024×1024 (CUDA) | ~58 s cool, ~63-71 s once the card reaches 82 °C |
+| flux3 generation, 16 steps, 512×512 (Vulkan1) | ~52 s cold, ~19 s warm |
+| flux3 edit, 512×512 (CUDA) | ~32 s |
+| MOSS generation, 20 steps, 1024×1024 (CUDA) | ~202 s cold, ~221 s including the model swap |
+| MOSS generation, 20 steps, 512×512 (Vulkan1) | ~67 s cold, ~63 s |
+| Qwen Turbo edit, 512×512 (CUDA) | ~25 s |
+
+MOSS is the slow model here: 20 steps plus a 9B text encoder whose prompt
+encoding alone takes tens of seconds. Flux3 Klein is the fast one — its warm
+512×512 on Vulkan beats the Qwen Turbo figure that has been quoted since 0.1.0.
+CUDA numbers drift with temperature: the same 1024×1024 flux3 run measured 58 s
+with a cool card and ~70 s at 82 °C, so treat ±20% as clock behaviour, not noise.
 
 Generations are synchronous, so a client that asks for 40 steps at 2 MP must be
 prepared to wait; `service.request_timeout_seconds` bounds it.
@@ -771,7 +819,7 @@ prepared to wait; `service.request_timeout_seconds` bounds it.
 ## Tests
 
 ```bash
-uv run pytest                    # 96 tests: config, translation, HTTP API, process supervision
+uv run pytest                    # 100 tests: config, translation, HTTP API, process supervision
                                  # no GPU needed; the 2 weight-dependent tests skip
 scripts/smoke_test.py --base-url http://127.0.0.1:8080 --api-key "$KEY" \
     --model qwen-image-2.1-turbo --size 512x512
@@ -821,7 +869,7 @@ machines and design decisions.
 ## License
 
 MIT — see [LICENSE](LICENSE). This covers the service code in this repository
-only. Two things it does not cover, and which are fetched separately by the setup
+only. Several things it does not cover, and which are fetched separately by the setup
 scripts rather than redistributed here:
 
 - **stable-diffusion.cpp** (`scripts/build_engine.sh`) — MIT, © 2023 leejet.
@@ -833,10 +881,16 @@ scripts rather than redistributed here:
   licensor. Note also that derivative works may not be named "Qwen" as their
   primary identifier.
 - **The Z-Image-Turbo weights** (`scripts/fetch_models.sh`) — **Apache-2.0**, as are
-  their Qwen3-4B text encoder and FLUX.1-schnell autoencoder. That makes
-  `z-image-turbo` the only model in the shipped registry whose weights permit
-  commercial use, which is the reason it is served alongside the Qwen models
-  despite weaker lettering.
+  their Qwen3-4B text encoder and FLUX.1-schnell autoencoder.
+- **The MOSS-Image weights** (`scripts/fetch_models.sh`) — **Apache-2.0** for the
+  SFT denoiser, the Qwen3.5-9B text encoder and the FLUX.2 VAE mirror, per the
+  license metadata of all three repositories. Alongside Z-Image this makes two of
+  the five served models usable commercially.
+- **The FLUX.3 Image Klein weights** (`scripts/fetch_models.sh`) — **FLUX
+  Kommunity License v1.0**: non-commercial use for anyone, *plus* commercial use
+  for a "Qualifying User" (affiliates under US$5M annualized revenue). Read it
+  (`LICENSE.md` in `unsloth/flux-3-image-klein-GGUF`) before shipping output
+  commercially above that threshold. The Qwen3-VL-4B text encoder is Apache-2.0.
 
 MIT covers this repository's code; it does not relicense the weights, and running
 the service with them commercially still requires the Qwen commercial license.

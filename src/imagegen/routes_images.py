@@ -87,8 +87,8 @@ async def edit_images(request: Request) -> JSONResponse:
     profile = resolve_profile(config, model)
     if not profile.supports_editing:
         raise InvalidRequestError(
-            f"model {profile.id!r} cannot edit images; it is deployed without a vision encoder "
-            "(vision_encoder), so reference images would be ignored",
+            f"model {profile.id!r} cannot edit images; it is configured with supports_editing=false, "
+            "so reference images would be ignored",
             param="model",
         )
     response_format = _form_text(form, "response_format") or "b64_json"

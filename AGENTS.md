@@ -16,7 +16,7 @@ translation contract and the backend lifecycle.
 ```bash
 uv sync                        # the service; uv also fetches Python >= 3.12
 scripts/build_engine.sh cuda   # engine; needs cmake >= 3.21, gcc/g++, nvcc
-scripts/fetch_models.sh        # ~14.8 GB; no Hugging Face account or token needed
+scripts/fetch_models.sh        # ~31.7 GB; no Hugging Face account or token needed
 uv run imagegen doctor         # exit 0 when provisioned; lists every gap otherwise
 ```
 
@@ -27,13 +27,13 @@ only to build the CUDA engine (`vulkan` needs `glslc`, `cpu` needs neither).
 
 ```bash
 uv sync                                   # install
-uv run pytest                             # 96 tests; launches real subprocesses, no GPU needed
+uv run pytest                             # 100 tests; launches real subprocesses, no GPU needed
 uv run pytest tests/test_api.py -q        # one file
 uv run imagegen doctor --config config/service.toml
 uv run imagegen models
 uv run imagegen plan --model qwen-image-2.1-turbo
 scripts/build_engine.sh cuda              # build third_party engine at the pinned commit
-scripts/fetch_models.sh                   # download weights (~14.8 GB, resumable)
+scripts/fetch_models.sh                   # download weights (~31.7 GB, resumable)
 scripts/fetch_models.sh --dry-run         # list them without writing bytes
 third_party/stable-diffusion.cpp/build/bin/sd-server --version   # confirm the pin
 ```
@@ -71,10 +71,12 @@ There is no configured linter or formatter; keep to the style already present
   be handed to unrelated models. A per-model flag needs a `ModelProfile` field.
 - **To support a new engine flag**, add the field to `ModelProfile`, emit it in
   `build_server_args()`, cover it in `tests/test_backend_process.py`, and record it
-  in the two tables above. Ming-Image is the standing example: it conditions on
-  Ling-mini-2.0 and needs `--tokenizer <tokenizer.json>`, which has no field yet,
-  so it cannot be served until one is added. Read `sd-server --help` at the pinned
-  build before adding anything — do not infer flag names from model docs.
+  in the two tables above. MOSS-Image is the standing example: it needs
+  `--tokenizer <tokenizer.json>` (Qwen3.5's vocabulary is not embedded in sd.cpp),
+  and the `tokenizer` field exists because it did. Ming-Image would now be
+  servable for the same reason, pending its Ling-mini-2.0 encoder. Read
+  `sd-server --help` at the pinned build before adding anything — do not infer flag
+  names from model docs.
 
 ## Things that look wrong but are load-bearing
 
@@ -172,10 +174,12 @@ There is no configured linter or formatter; keep to the style already present
 
 ## Engine pinning
 
-`scripts/build_engine.sh` pins `f89d9b13d730eabeede7314ce49dacd18d3c90c2`, reported
-by `sd-server --version` as `master-951-f89d9b1`. Sigma handling for Qwen-Image-2.1
-changed as recently as `c150a6b` (2026-10-06), so upgrades are deliberate: change
-the pin, rebuild, re-run the smoke test, and re-check
+`scripts/build_engine.sh` pins `0518b34374761cb82aeda5ad3c2f0686fdad2cec`, reported
+by `sd-server --version` as `master-951-f89d9b1-31-g0518b34`. The previous pin
+(`f89d9b1`) could not serve MOSS-Image or FLUX.3 Image Klein — both architectures
+landed after it (68285df, 8cd731e), which forced this upgrade. Sigma handling for
+Qwen-Image-2.1 has also changed as recently as `c150a6b` (2026-10-06), so upgrades
+are deliberate: change the pin, rebuild, re-run the smoke test, and re-check
 `GET /sdcpp/v1/capabilities` for changed `output_formats` and `limits`.
 
 - **Do not reintroduce a shallow clone.** GitHub refuses to fetch an arbitrary SHA,

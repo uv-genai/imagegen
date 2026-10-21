@@ -23,6 +23,7 @@ KNOWN_SERVER_FLAGS = {
     "--vae",
     "--llm",
     "--llm_vision",
+    "--tokenizer",
     "--listen-ip",
     "--listen-port",
     "--log-level",
@@ -75,22 +76,51 @@ def test_base_command_omits_sigma_and_flow_shift(shipped) -> None:
 def test_weight_paths_are_absolute_and_exist(shipped) -> None:
     """The engine is handed absolute paths, so it does not depend on the CWD.
 
-    `--llm_vision` is only expected where the profile has a vision tower: a
-    text-encoder-only model such as Z-Image-Turbo must not be given the flag.
+    `--llm_vision` is only expected where the profile has a vision tower: the
+    flux2/flux3 edit preset passes references through the VAE and needs none,
+    and a text-encoder-only model such as Z-Image-Turbo cannot edit at all.
+    `--tokenizer` only appears where the vocabulary is not embedded (MOSS).
     """
     config, config_dir = shipped
     for profile in config.models:
         args = build_server_args(profile, config.backends, config_dir)
         flags = ["--diffusion-model", "--vae", "--llm"]
-        if profile.supports_editing:
+        if profile.vision_encoder is not None:
             flags.append("--llm_vision")
         else:
             assert "--llm_vision" not in args, f"{profile.id} has no vision tower to pass"
+        if profile.tokenizer is not None:
+            flags.append("--tokenizer")
+        else:
+            assert "--tokenizer" not in args, f"{profile.id} embeds its vocabulary"
         for flag in flags:
             value = args[args.index(flag) + 1]
             assert Path(value).is_absolute(), f"{flag} must be absolute, got {value}"
             if not Path(value).is_file():
                 pytest.skip("weights not downloaded; run scripts/fetch_models.sh")
+
+
+def test_moss_command_carries_its_external_tokenizer(shipped) -> None:
+    """Qwen3.5's vocabulary is not embedded in sd.cpp; omitting it garbles prompts."""
+    config, config_dir = shipped
+    args = build_server_args(config.profile("moss-image"), config.backends, config_dir)
+    assert args[args.index("--tokenizer") + 1].endswith("tokenizer.json")
+    assert args[args.index("--flow-shift") + 1] == "5.0"
+    assert args[args.index("--cfg-scale") + 1] == "3.0"
+
+
+def test_flux3_edits_without_a_vision_tower(shipped) -> None:
+    """The flux2 preset sends references to the DiT via the VAE: editing works
+    with supports_editing=true and vision_encoder unset, and no --llm_vision."""
+    config, config_dir = shipped
+    profile = config.profile("flux-3-image-klein")
+    assert profile.supports_editing is True
+    assert profile.vision_encoder is None
+    args = build_server_args(profile, config.backends, config_dir)
+    assert "--llm_vision" not in args
+    assert "--tokenizer" not in args  # Qwen3-VL's tokenizer is embedded
+    assert args[args.index("--flow-shift") + 1] == "6.93"
+    assert args[args.index("--steps") + 1] == "16"
 
 
 def test_backend_binds_loopback_only(shipped) -> None:

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Download the weight sets required by the models in config/service.toml:
-# Qwen-Image-2.1 (base and Turbo) and Z-Image-Turbo.
+# Qwen-Image-2.1 (base and Turbo), Z-Image-Turbo, MOSS-Image SFT and
+# FLUX.3 Image Klein.
 #
 # Every artifact below is pinned to an explicit repository revision so that a
 # rebuilt machine reproduces byte-identical weights. Files already present with
@@ -55,6 +56,25 @@ DOWNLOADS=(
   # Z-Image VAE. It is the FLUX.1-schnell autoencoder, mirrored here by Comfy-Org
   # because black-forest-labs/FLUX.1-schnell is gated (needs a logged-in token).
   "Comfy-Org/z_image_turbo main split_files/vae/ae.safetensors"
+  # MOSS-Image SFT denoiser (5B, instruction-tuned; Base is the raw counterpart),
+  # GGUF quantization by realrebelai. Apache-2.0.
+  "realrebelai/MOSS-Image_GGUFs main MOSS-Image-SFT-Q5_K_M.gguf"
+  # MOSS-Image text encoder: Qwen3.5-9B. Q4_K_M matches the upstream
+  # docs/moss_image.md example; Q5_K_M exists but adds 0.9 GB for no measured gain.
+  "unsloth/Qwen3.5-9B-GGUF main Qwen3.5-9B-Q4_K_M.gguf"
+  # MOSS-Image tokenizer.json. Qwen3.5 uses a different vocabulary from the
+  # embedded Qwen tokenizer, so sd-server needs --tokenizer with this file.
+  "OpenMOSS-Team/MOSS-Image-Base main tokenizer/tokenizer.json"
+  # FLUX.3 Image Klein denoiser (4B distilled). GGUF by unsloth; Q5_K_M keeps
+  # detail at 4.2 GB, comfortably inside the 8 GB card with the 4B encoder.
+  "unsloth/flux-3-image-klein-GGUF main flux-3-image-klein-Q5_K_M.gguf"
+  # FLUX.3 Image Klein text encoder: Qwen3-VL-4B. No mmproj needed: edits use
+  # the 'flux2' preset (VLM=No), passing reference images to the DiT via the VAE.
+  "Qwen/Qwen3-VL-4B-Instruct-GGUF main Qwen3VL-4B-Instruct-Q4_K_M.gguf"
+  # FLUX.2 VAE, shared by MOSS-Image and FLUX.3 Klein. Mirrored by Comfy-Org
+  # because black-forest-labs/FLUX.2-dev is gated; byte size matches BFL's
+  # ae.safetensors (336211292) exactly.
+  "Comfy-Org/MOSS-Image main vae/flux2-vae.safetensors"
 )
 
 # Expected sizes in bytes, used as the idempotency check. Verified against the
@@ -68,6 +88,12 @@ declare -A EXPECTED_BYTES=(
   [z_image_turbo-Q4_K.gguf]=3864250304
   [Qwen3-4B-Instruct-2507-Q4_K_M.gguf]=2497281120
   [ae.safetensors]=335304388
+  [MOSS-Image-SFT-Q5_K_M.gguf]=4114968896
+  [Qwen3.5-9B-Q4_K_M.gguf]=5680522464
+  [tokenizer.json]=19989325
+  [flux-3-image-klein-Q5_K_M.gguf]=4216230816
+  [Qwen3VL-4B-Instruct-Q4_K_M.gguf]=2497281664
+  [flux2-vae.safetensors]=336211292
 )
 
 # Returns 0 when the local file exists and matches its expected byte size.

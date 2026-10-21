@@ -62,7 +62,11 @@ class ModelProfile(BaseModel):
     text_encoder: str = Field(description="Text encoder (LLM) file name inside models_dir.")
     vision_encoder: str | None = Field(
         default=None,
-        description="mmproj vision tower required for image editing; None disables editing.",
+        description="mmproj vision tower; only VLM-based edit presets (e.g. qwen) need it.",
+    )
+    tokenizer: str | None = Field(
+        default=None,
+        description="External tokenizer.json for vocabularies not embedded in sd.cpp (MOSS/Qwen3.5).",
     )
     port: int = Field(gt=0, lt=65536, description="Loopback port the sd-server instance binds.")
     supports_editing: bool = False
@@ -71,14 +75,6 @@ class ModelProfile(BaseModel):
     max_pixels: int = Field(gt=0, description="Upper bound on width * height for this model.")
     max_images_per_request: int = Field(default=1, gt=0, le=8)
     sampling: SamplingDefaults
-
-    @field_validator("supports_editing")
-    @classmethod
-    def _editing_requires_vision_encoder(cls, value: bool, info) -> bool:
-        """Refuse to advertise editing without the vision tower to load."""
-        if value and info.data.get("vision_encoder") is None:
-            raise ValueError("supports_editing requires vision_encoder")
-        return value
 
     @model_validator(mode="after")
     def _default_size_fits(self) -> Self:
@@ -229,6 +225,8 @@ class ServiceConfig(BaseModel):
                 path = self.backends.weight_path(config_dir, name)
                 if not path.is_file():
                     problems.append(f"model {profile.id!r}: weight file not found: {path}")
+            if profile.tokenizer is not None and not self.backends.weight_path(config_dir, profile.tokenizer).is_file():
+                problems.append(f"model {profile.id!r}: tokenizer file not found: {profile.tokenizer}")
         return problems
 
     def verify_weights(self, config_dir: Path) -> None:

@@ -52,6 +52,8 @@ def test_shipped_config_loads_and_registers_every_model() -> None:
         "qwen-image-2.1",
         "qwen-image-2.1-turbo",
         "z-image-turbo",
+        "moss-image",
+        "flux-3-image-klein",
     ]
     assert config_dir == SHIPPED_CONFIG.parent
     assert config.backends.sd_server_binary.endswith("sd-server")
@@ -222,10 +224,25 @@ def test_default_size_is_validated_at_startup() -> None:
         build_profile(default_size="1000x1000")
 
 
-def test_editing_without_vision_encoder_is_refused() -> None:
-    """Advertising editing without the vision tower would silently ignore inputs."""
-    with pytest.raises(ValueError, match="requires vision_encoder"):
-        build_profile(supports_editing=True, vision_encoder=None)
+def test_editing_without_vision_encoder_is_allowed() -> None:
+    """The flux2/flux3 edit preset needs no vision tower: references reach the
+    DiT through the VAE. Decoupling the two was forced by FLUX.3 Image Klein."""
+    profile = build_profile(supports_editing=True, vision_encoder=None)
+    assert profile.supports_editing is True
+
+
+def test_vision_encoder_with_editing_disabled_is_allowed() -> None:
+    """A configured tower with editing off is a dormant file reference, not an
+    error: the flag is simply not passed (test-turbo ships exactly this shape)."""
+    profile = build_profile(supports_editing=False, vision_encoder="stub_mmproj.gguf")
+    assert profile.vision_encoder == "stub_mmproj.gguf"
+
+
+def test_shipped_flux3_profile_edits_without_a_vision_tower() -> None:
+    """The decoupling above is load-bearing: the shipped config depends on it."""
+    config, _ = load_config(SHIPPED_CONFIG)
+    profile = config.profile("flux-3-image-klein")
+    assert profile.supports_editing and profile.vision_encoder is None
 
 
 def test_sampling_rejects_out_of_range_sigmas() -> None:
