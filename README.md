@@ -116,7 +116,7 @@ third_party/stable-diffusion.cpp/build/bin/sd-server --version   # must report t
 uv run pytest                                           # 100 tests; the 2 needing weights self-skip
 ```
 
-`sd-server --version` should print `stable-diffusion.cpp version master-951-f89d9b1-31-g0518b34,
+`sd-server --version` should print `stable-diffusion.cpp version master-982-0518b34,
 commit 0518b34`. That is the commit this service was built and measured against;
 `PINNED_COMMIT` in `scripts/build_engine.sh` is the one place to change it. If the
 version differs, the engine was built from something else and the results below do
@@ -414,24 +414,28 @@ Note its header: the `[[models]]` blocks are duplicated from
 container without rebuilding, follow [Adding a model](#adding-a-model) and mount
 the result via `IMAGEGEN_CONFIG`.
 
-### Measured in-container (RTX 2070 8 GB, 512×512, Turbo)
+### Measured in-container (RTX 2070 8 GB, 512×512)
 
-| Backend | Generation time |
+Measured on this machine through the gateway after the `0518b34` rebuild:
+
+| Backend / model | Generation time |
 | --- | --- |
-| `cuda` | 19 s |
-| `vulkan` | 32 s |
+| `cuda` / `moss-image` (cold) | 54 s |
+| `vulkan` / `flux-3-image-klein` (cold) | 31 s |
+| Compose / `flux-3-image-klein` (cold, weights already in page cache) | 15 s |
 
-Both report `stable-diffusion.cpp version master-951-f89d9b1` inside the container,
-`GET /v1/models` lists all three models, and an unauthenticated generation request
-returns 401. Note that only the NVIDIA device is passed into the container, so
-`Vulkan0` there is the RTX 2070 — the iGPU-index trap described under
-[Compute backend](#compute-backend) does not apply.
+Both entrypoints log `stable-diffusion.cpp version master-982-0518b34, commit
+0518b34` at start, `GET /v1/models` lists all five models, and an unauthenticated
+generation request returns 401. Note that only the NVIDIA device is passed into
+the container, so `Vulkan0` there *is* the RTX 2070 — the iGPU-index trap
+described under [Compute backend](#compute-backend) does not apply, which is why
+the container Vulkan numbers are faster than the host's Vulkan1 figures: no iGPU
+displaces it from enumeration.
 
-These numbers were measured on the `f89d9b1` engine and a three-model image; the
-shipped image predates both the `0518b34` pin bump and the MOSS/FLUX.3 entries now
-in `config/container.toml`. Rebuilding (`docker build`) picks up both — the engine
-is compiled from the pinned commit at build time — so re-run the table above after
-rebuilding rather than quoting it for a newer image.
+The image rebuilds its engines from the pinned commit in `scripts/build_engine.sh`
+and copies `config/container.toml` verbatim, so a fresh `docker build` after either
+changes ships them. If `--version` disagrees with the line above, your image
+predates a pin bump — rebuild before quoting this table.
 
 ### Entrypoint commands
 

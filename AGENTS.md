@@ -175,7 +175,7 @@ There is no configured linter or formatter; keep to the style already present
 ## Engine pinning
 
 `scripts/build_engine.sh` pins `0518b34374761cb82aeda5ad3c2f0686fdad2cec`, reported
-by `sd-server --version` as `master-951-f89d9b1-31-g0518b34`. The previous pin
+by `sd-server --version` as `master-982-0518b34`. The previous pin
 (`f89d9b1`) could not serve MOSS-Image or FLUX.3 Image Klein — both architectures
 landed after it (68285df, 8cd731e), which forced this upgrade. Sigma handling for
 Qwen-Image-2.1 has also changed as recently as `c150a6b` (2026-10-06), so upgrades

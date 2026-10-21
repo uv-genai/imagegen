@@ -2,7 +2,7 @@
 #
 #   IMAGEGEN_API_KEYS="$(openssl rand -hex 24)" docker compose up -d --build
 #
-# Populate the weights volume once (about 14.8 GB):
+# Populate the weights volume once (about 31.7 GB):
 #
 #   docker compose run --rm fetch-models
 #

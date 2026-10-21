@@ -9,7 +9,7 @@
 #   docker build -t imagegen:latest .
 #   docker run --rm --gpus all -e IMAGEGEN_API_KEYS=... -v imagegen-models:/models imagegen:latest
 #
-# Weights are never baked into the image: they are ~14.8 GB and change
+# Weights are never baked into the image: they are ~31.7 GB and change
 # independently of the code. Mount a volume at /models and use the `fetch-models`
 # entrypoint command to populate it.
 

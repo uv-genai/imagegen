@@ -27,7 +27,7 @@ logger = logging.getLogger("imagegen.backend")
 BACKEND_HOST = "127.0.0.1"
 
 #: Keys present in a capabilities report only once the engine has finished
-#: building it. Verified against sd-server master-951-f89d9b1-31-g0518b34, whose
+#: building it. Verified against sd-server master-982-0518b34, whose
 #: ``GET /sdcpp/v1/capabilities`` answers with ``current_mode``, ``defaults``,
 #: ``defaults_by_mode``, ``features``, ``features_by_mode``, ``generation_features``,
 #: ``limits``, ``loras``, ``model``, ``output_formats``, ``output_formats_by_mode``,
