@@ -163,7 +163,7 @@ mean step 3 did not (`scripts/fetch_models.sh`). Both scripts are resumable.
 
 | Resource | Amount |
 | --- | --- |
-| Disk | ~15 GB weights + ~1.5 GB engine build tree |
+| Disk | ~32 GB weights + ~1.5 GB engine build tree |
 | RAM | ~10 GB per loaded backend (only one is loaded by default) |
 | VRAM | runs on 8 GB with CPU offload, at a ~1 MP ceiling; 12 GB+ for the 2 MP Qwen recommends |
 
