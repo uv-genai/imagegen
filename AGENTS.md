@@ -27,7 +27,7 @@ only to build the CUDA engine (`vulkan` needs `glslc`, `cpu` needs neither).
 
 ```bash
 uv sync                                   # install
-uv run pytest                             # 100 tests; launches real subprocesses, no GPU needed
+uv run pytest                             # 110 tests; launches real subprocesses, no GPU needed
 uv run pytest tests/test_api.py -q        # one file
 uv run imagegen doctor --config config/service.toml
 uv run imagegen models
@@ -77,6 +77,22 @@ There is no configured linter or formatter; keep to the style already present
   servable for the same reason, pending its Ling-mini-2.0 encoder. Read
   `sd-server --help` at the pinned build before adding anything — do not infer flag
   names from model docs.
+- **A gateway-only per-model field still belongs on `ModelProfile`.** Not every
+  field reaches the engine: `layout` is advertised in `GET /v1/models` and never
+  touches a command line or a request. It lives on the profile anyway, because
+  `extra="forbid"` rejects an undeclared TOML key and because both shipped configs
+  are validated against that model. Add it to the config banner and to the README
+  key table as well — the tables are the contract, not a convenience.
+- **`/v1/models` carries an optional `layout` dialect, and absence is the signal.**
+  `"layout": "moss"` means the checkpoint parses a MOSS layout JSON document
+  (`summary.caption`, `items` with `yxyx` bboxes in `abs_centralized` coordinates)
+  sent as an ordinary `prompt` string; imagegen relays it verbatim and parses
+  nothing. **Omit the key when unset — never serialize `null`**, because clients
+  distinguish "this model has no layout support" from "this engine predates the
+  extension", and `null` erases that difference. Verified against the weights, not
+  just docs: the upstream USERGUIDE example layout rendered to its bboxes through
+  the real MOSS checkpoint on CUDA. Layout support lives in the checkpoint, so a
+  non-MOSS model must not claim the dialect.
 
 ## Things that look wrong but are load-bearing
 

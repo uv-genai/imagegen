@@ -8,8 +8,10 @@ why they are shaped the way they are.
 
 `imagegen` exposes an **OpenAI-compatible image API** in front of
 [`stable-diffusion.cpp`](https://github.com/leejet/stable-diffusion.cpp), which runs
-the Qwen-Image-2.1 family. It is a gateway plus a process supervisor, not an
-inference engine: all sampling happens inside `sd-server` child processes.
+the configured model registry (Qwen-Image-2.1 base and Turbo, Z-Image-Turbo,
+MOSS-Image SFT and FLUX.3 Image Klein as shipped). It is a gateway plus a process
+supervisor, not an inference engine: all sampling happens inside `sd-server` child
+processes.
 
 ```
                        client: OpenAI SDK, Open WebUI, curl
@@ -166,6 +168,36 @@ configured profile (`capability_mismatches`): accepted output formats versus
 the default size versus `limits.max_width`/`max_height`. Mismatches are logged as
 configuration defects instead of surfacing mid-request. The report is also exposed
 through `GET /health/backends`.
+
+## What the service advertises
+
+`GET /v1/models` is the only discovery surface, and it also carries the one
+capability that the OpenAI shape has no field for: **`layout`**.
+
+Structured layout is a property of the *weights*, not of this service. A MOSS
+checkpoint parses a layout JSON document (`summary.caption`, `items` with
+`label`/`caption`/`text`/`bbox`, `bbox_format: "yxyx"`,
+`bbox_coord_space: "abs_centralized"`) passed as the ordinary `prompt` string, so
+the gateway needs no new endpoint, no request field and no parsing: the document
+is a string and is relayed verbatim like any other prompt. The only thing a
+client cannot discover on its own is *which* models accept it, which is why the
+profile carries a `layout` dialect slug and the model list echoes it.
+
+Two rules make that key usable:
+
+- **Absent, not `null`.** Omission means "not advertised". A client that sees no
+  `layout` key cannot tell a non-layout model from an older engine, but a `null`
+  would make those two cases indistinguishable *by construction*, and the
+  distinction is the point of shipping the extension at all.
+- **It is advertisement only.** The gateway does not validate, translate or
+  geometry-check a layout document; an invalid one reaches the sampler and fails
+  there, exactly as a malformed natural-language prompt would. Keeping the
+  gateway out of the format is what lets new dialects appear as a config value
+  rather than a code change.
+
+Because the capability comes from the checkpoint, `layout` must be set per
+profile — the shipped `moss-image` sets `"moss"`, and the four non-MOSS models
+leave it unset even though they accept the same prompt string.
 
 ## Module map
 
