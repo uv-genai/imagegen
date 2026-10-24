@@ -31,18 +31,26 @@ MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 
 @router.get("/v1/models")
 async def list_models(request: Request) -> JSONResponse:
-    """Report every registered model in OpenAI's model-list shape."""
+    """Report every registered model in OpenAI's model-list shape.
+
+    A profile that declares a structured-layout dialect gains a ``layout`` key.
+    It is omitted entirely when unset rather than sent as ``null``: clients tell
+    "this model does not do layout" apart from "this engine lacks the
+    extension", and only the absent key means the latter.
+    """
     config = request.app.state.config
-    data = [
-        {
+    data = []
+    for profile in config.models:
+        entry = {
             "id": profile.id,
             "object": "model",
             "created": int(time.time()),
             "owned_by": "imagegen",
             "description": profile.description or profile.id,
         }
-        for profile in config.models
-    ]
+        if profile.layout is not None:
+            entry["layout"] = profile.layout
+        data.append(entry)
     return JSONResponse({"object": "list", "data": data})
 
 

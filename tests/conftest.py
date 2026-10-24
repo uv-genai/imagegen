@@ -73,6 +73,7 @@ text_encoder = "stub_llm.gguf"
 vision_encoder = "stub_mmproj.gguf"
 port = {free_port()}
 supports_editing = true
+layout = "moss"
 default_size = "1024x1024"
 dimension_multiple = 32
 max_pixels = 1048576

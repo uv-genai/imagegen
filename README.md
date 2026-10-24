@@ -488,7 +488,7 @@ duplicated, so a model change belongs in both.
 
 ### `[[models]]` and `[models.sampling]`
 
-Covered by [Adding a model](#adding-a-model), which lists all 14 model keys and
+Covered by [Adding a model](#adding-a-model), which lists all 15 model keys and
 all 7 sampling keys with required/optional status and defaults. The same list is
 repeated in the banner above `[[models]]` in `config/service.toml`.
 
@@ -577,6 +577,7 @@ unsupported key is a startup error naming that key, never a silent no-op.
 | `vision_encoder` | no | none | mmproj tower; only VLM-based edit presets (qwen) need it |
 | `tokenizer` | no | none | External `tokenizer.json` when the vocabulary is not embedded in sd.cpp (MOSS/Qwen3.5) |
 | `supports_editing` | no | `false` | Offers `/v1/images/edits`; the tower is passed as `--llm_vision` only when `vision_encoder` is also set |
+| `layout` | no | none | Structured-layout dialect this checkpoint parses inside the prompt (e.g. `moss`); advertised in `GET /v1/models` |
 | `dimension_multiple` | no | `32` | Width and height must be multiples of it |
 | `max_images_per_request` | no | `1` | 1..8 |
 
@@ -664,6 +665,28 @@ Extensions beyond OpenAI, both optional:
 - **`sd_cpp`** — any field of the native `sdcpp` request schema, merged over the
   model profile. `{"sample_params": {"eta": 0.5}}` changes only `eta`.
 - **`strength`** on edits — see the note below; defaults to `1.0`.
+
+There is also one optional key on the **`/v1/models` responses**, and only on
+responses:
+
+- **`layout`** — a dialect identifier string, present only for a model whose
+  profile sets `layout`. `"moss"` means the checkpoint parses a MOSS-Image layout
+  JSON document sent as an ordinary `prompt` string: `summary.caption`, `items`
+  with `label`/`caption`/`text`/`bbox`, `bbox_format: "yxyx"` and
+  `bbox_coord_space: "abs_centralized"` (pixel coordinates with the canvas centre
+  as origin, so a 1024×1024 canvas spans −512…+512). imagegen relays it verbatim
+  and does no layout parsing or validation of its own.
+
+  The key is **omitted entirely when unset** — never `null`. A client can
+therefore tell "this model does not do layout" (key absent) apart from "this
+engine predates the extension" (also absent, but the field is unknown to it), and
+serialising `null` would erase that distinction.
+
+  Availability of the dialect is in the weights: upstream documents layout input
+  for both MOSS-Image Base and SFT, and the shipped `moss-image` profile sets
+  `layout = "moss"`. Layout prompts are marked *experimental* upstream, and
+  `bbox` values are absolute pixels for one canvas, so a client must generate at
+  the size it computed the coordinates for.
 
 Geometry rules come from the model profile: dimensions must be multiples of
 `dimension_multiple` (32) and `width * height <= max_pixels`. Qwen recommends ~2 MP;

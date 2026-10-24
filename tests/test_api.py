@@ -61,6 +61,20 @@ async def test_models_endpoint_lists_configured_models(client: httpx.AsyncClient
     assert all(entry["object"] == "model" for entry in body["data"])
 
 
+async def test_models_endpoint_advertises_layout_only_where_configured(
+    client: httpx.AsyncClient,
+) -> None:
+    """A profile with a dialect gains a `layout` key; one without omits it entirely.
+
+    Omission — not `null` — is the contract: clients distinguish "this model has no
+    layout support" from "this engine does not speak the extension".
+    """
+    response = await client.get("/v1/models")
+    entries = {entry["id"]: entry for entry in response.json()["data"]}
+    assert entries["test-model"]["layout"] == "moss"
+    assert "layout" not in entries["test-turbo"]
+
+
 async def test_health_is_unauthenticated(client: httpx.AsyncClient) -> None:
     """Liveness must not require credentials."""
     response = await client.get("/health")

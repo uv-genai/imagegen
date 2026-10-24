@@ -83,6 +83,11 @@ extra_args = []
 #                                           vision_encoder is also set (the
 #                                           flux2/flux3 preset needs none: refs
 #                                           reach the DiT through the VAE)
+#   layout                   no   none      structured-layout dialect this
+#                                           checkpoint parses inside the prompt
+#                                           (e.g. "moss"); advertised as a
+#                                           `layout` key in GET /v1/models and
+#                                           omitted entirely when unset
 #   default_size             yes           "1024x1024"; used when the client
 #                                           omits size, and must itself satisfy
 #                                           the two rules below
@@ -194,6 +199,12 @@ port = 8114
 # MOSS is absent from the upstream edit.md model table and from
 # sd_version_supports_ref_image_conditioning: reference images would be ignored.
 supports_editing = false
+# Advertise structured-layout support in /v1/models. The layout JSON document
+# (summary.caption + items with yxyx bboxes in abs_centralized coordinates) is
+# sent as the ordinary `prompt` string; the weights parse it and imagegen only
+# relays it. Both Base and SFT document this; generation size must match the
+# canvas the coordinates were computed for.
+layout = "moss"
 default_size = "1024x1024"
 # 16 per upstream docs/moss_image.md ("dimensions divisible by 16").
 dimension_multiple = 16

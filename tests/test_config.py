@@ -238,6 +238,37 @@ def test_vision_encoder_with_editing_disabled_is_allowed() -> None:
     assert profile.vision_encoder == "stub_mmproj.gguf"
 
 
+def test_layout_dialect_is_accepted() -> None:
+    """A dialect slug on a profile is valid and is preserved verbatim."""
+    profile = build_profile(layout="moss")
+    assert profile.layout == "moss"
+
+
+def test_layout_defaults_to_unset() -> None:
+    """Unset means "not advertised"; the API then omits the key rather than null."""
+    assert build_profile().layout is None
+
+
+@pytest.mark.parametrize("bad", ["MOSS", "moss layout", "", "-moss", "moss/1"])
+def test_layout_rejects_malformed_dialect(bad: str) -> None:
+    """The same slug rule as model ids, so future dialects slot in unchanged."""
+    with pytest.raises(ValueError):
+        build_profile(layout=bad)
+
+
+def test_shipped_moss_profile_advertises_its_layout_dialect() -> None:
+    """The served MOSS weights parse layout JSON, so the shipped config advertises it."""
+    config, _ = load_config(SHIPPED_CONFIG)
+    assert config.profile("moss-image").layout == "moss"
+
+
+def test_shipped_profiles_without_layout_stay_unset() -> None:
+    """Advertising a dialect a checkpoint does not parse would break the client."""
+    config, _ = load_config(SHIPPED_CONFIG)
+    for model_id in ("qwen-image-2.1", "qwen-image-2.1-turbo", "z-image-turbo", "flux-3-image-klein"):
+        assert config.profile(model_id).layout is None, model_id
+
+
 def test_shipped_flux3_profile_edits_without_a_vision_tower() -> None:
     """The decoupling above is load-bearing: the shipped config depends on it."""
     config, _ = load_config(SHIPPED_CONFIG)

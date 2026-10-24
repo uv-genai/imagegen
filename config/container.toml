@@ -129,6 +129,12 @@ port = 8114
 # MOSS is absent from the upstream edit.md model table and from
 # sd_version_supports_ref_image_conditioning: reference images would be ignored.
 supports_editing = false
+# Advertise structured-layout support in /v1/models. The layout JSON document
+# (summary.caption + items with yxyx bboxes in abs_centralized coordinates) is
+# sent as the ordinary `prompt` string; the weights parse it and imagegen only
+# relays it. Both Base and SFT document this; generation size must match the
+# canvas the coordinates were computed for.
+layout = "moss"
 default_size = "1024x1024"
 # 16 per upstream docs/moss_image.md ("dimensions divisible by 16").
 dimension_multiple = 16

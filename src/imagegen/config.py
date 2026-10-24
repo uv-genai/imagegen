@@ -70,6 +70,14 @@ class ModelProfile(BaseModel):
     )
     port: int = Field(gt=0, lt=65536, description="Loopback port the sd-server instance binds.")
     supports_editing: bool = False
+    layout: str | None = Field(
+        default=None,
+        pattern=r"^[a-z0-9][a-z0-9._-]*$",
+        description=(
+            "Structured-layout dialect this checkpoint parses in the prompt "
+            '(e.g. "moss"); unset means layout support is not advertised.'
+        ),
+    )
     default_size: str = Field(pattern=r"^\d+x\d+$", description="Generation size when the client omits one.")
     dimension_multiple: int = Field(default=32, gt=0, description="Width and height must be a multiple of this.")
     max_pixels: int = Field(gt=0, description="Upper bound on width * height for this model.")
