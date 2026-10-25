@@ -42,7 +42,7 @@ preflight_weights() {
     cat >&2 <<'MSG'
 imagegen: no weights in /models.
 
-Populate the volume first (about 31.7 GB, resumable):
+Populate the volume first (about 33.1 GB, resumable):
 
     docker compose run --rm fetch-models
 
