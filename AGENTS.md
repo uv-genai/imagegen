@@ -16,7 +16,7 @@ translation contract and the backend lifecycle.
 ```bash
 uv sync                        # the service; uv also fetches Python >= 3.12
 scripts/build_engine.sh cuda   # engine; needs cmake >= 3.21, gcc/g++, nvcc
-scripts/fetch_models.sh        # ~31.7 GB; no Hugging Face account or token needed
+scripts/fetch_models.sh        # ~33.1 GB; no Hugging Face account or token needed
 uv run imagegen doctor         # exit 0 when provisioned; lists every gap otherwise
 ```
 
@@ -33,7 +33,7 @@ uv run imagegen doctor --config config/service.toml
 uv run imagegen models
 uv run imagegen plan --model qwen-image-2.1-turbo
 scripts/build_engine.sh cuda              # build third_party engine at the pinned commit
-scripts/fetch_models.sh                   # download weights (~31.7 GB, resumable)
+scripts/fetch_models.sh                   # download weights (~33.1 GB, resumable)
 scripts/fetch_models.sh --dry-run         # list them without writing bytes
 third_party/stable-diffusion.cpp/build/bin/sd-server --version   # confirm the pin
 ```
@@ -159,6 +159,14 @@ There is no configured linter or formatter; keep to the style already present
     both are correct.** A container is reached through a published port, so binding
     loopback inside it would make it unreachable; bare metal should not advertise
     the GPU to the network unless the operator chose to. Do not "align" them.
+13. **`moss-image` ships Q8_0, and that is faster than the smaller quants.** With
+    `offload_to_cpu` the weights live in host RAM and stream to the GPU per layer,
+    so bit-width drives dequantisation cost, not a VRAM reservation: the engine
+    logs `VRAM 0.00MB` for params. Measured at 1024x1024 on the RTX 2070 —
+    Q5_K_M 4774 MiB / 195-224 s, UD-Q6_K_XL 5148 MiB / 199 s, Q8_0 6130 MiB /
+    156-171 s, BF16 7148 MiB / 541 s. Do not "optimise" the shipped quant down on
+    the assumption that smaller is faster. The reason to use a smaller one is
+    VRAM headroom (Q8 leaves ~1.7 GB of 7800 usable) or host RAM, not speed.
 
 ## Verifying changes
 

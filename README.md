@@ -64,7 +64,7 @@ cd imagegen
 
 uv sync                        # 1. the service: deps + venv          (seconds)
 scripts/build_engine.sh cuda   # 2. the inference engine              (~10 min)
-scripts/fetch_models.sh        # 3. the weights, ~31.7 GB, resumable  (network-bound)
+scripts/fetch_models.sh        # 3. the weights, ~33.1 GB, resumable  (network-bound)
 uv run imagegen doctor         # 4. verify binary, weights and devices
 ```
 
@@ -76,7 +76,7 @@ one pinned commit (~400 MB, blobless) into `third_party/`; step 3 writes to
 Peek before committing to the download:
 
 ```bash
-scripts/fetch_models.sh --dry-run     # lists the files and ~31.7 GB total, writes nothing
+scripts/fetch_models.sh --dry-run     # lists the files and ~33.1 GB total, writes nothing
 ```
 
 ### Compute backend
@@ -163,7 +163,7 @@ mean step 3 did not (`scripts/fetch_models.sh`). Both scripts are resumable.
 
 | Resource | Amount |
 | --- | --- |
-| Disk | ~32 GB weights + ~1.5 GB engine build tree |
+| Disk | ~33 GB weights + ~1.5 GB engine build tree |
 | RAM | ~10 GB per loaded backend (only one is loaded by default) |
 | VRAM | runs on 8 GB with CPU offload, at a ~1 MP ceiling; 12 GB+ for the 2 MP Qwen recommends |
 
@@ -308,7 +308,7 @@ much longer CUDA compile.
 
 ### Weights
 
-Never baked in — they are ~31.7 GB and change independently of the code. Put them
+Never baked in — they are ~33.1 GB and change independently of the code. Put them
 in a volume and fill it once:
 
 ```bash
@@ -516,7 +516,7 @@ Configured in `config/service.toml`:
 | `qwen-image-2.1` | `leejet/Qwen-Image-2.1-GGUF` `qwen_image_2.1-Q4_K` | 40 steps, CFG 6.0, euler |
 | `qwen-image-2.1-turbo` | `AtomicChat/Qwen-Image-2.1-Turbo-GGUF` `AD-Q4_K` | 8 steps, CFG 1.0, euler, fixed sigmas |
 | `z-image-turbo` | `leejet/Z-Image-Turbo-GGUF` `Q4_K` | 8 steps, CFG 1.0, euler_a |
-| `moss-image` | `realrebelai/MOSS-Image_GGUFs` `SFT-Q5_K_M` | 20 steps, CFG 3.0, euler, shift 5 |
+| `moss-image` | `unsloth/MOSS-Image-SFT-GGUF` `Q8_0` | 20 steps, CFG 3.0, euler, shift 5 |
 | `flux-3-image-klein` | `unsloth/flux-3-image-klein-GGUF` `Q5_K_M` | 16 steps, CFG 1.0, euler, shift 6.93 |
 
 Shared by the two Qwen models: VAE `Comfy-Org/Qwen-Image-2.1` →
@@ -546,7 +546,7 @@ prompt adherence of the set at 20 steps but the slowest prompt encoding (9B
 text encoder). See [Choosing a model for posters and
 infographics](#choosing-a-model-for-posters-and-infographics).
 
-Two things worth knowing before changing quants:
+Three things worth knowing before changing quants:
 
 - **The Turbo sigma schedule is part of the model.** It is the `sample_sigmas`
   array from `Qwen/Qwen-Image-2.1-Turbo/model_index.json` with a trailing `0.0`.
@@ -556,6 +556,23 @@ Two things worth knowing before changing quants:
 - **Text-encoder quantization moves the image as much as the denoiser does.** Q8_0
   is closest; Q4_K_M is roughly equivalent to a Q4 denoiser in perceptual drift.
   Swap `text_encoder` in the config if you have the RAM for it.
+- **A larger quant can be faster, not slower.** `moss-image` ships unsloth's
+  `Q8_0` because it measured *quicker* than `Q5_K_M` on this card — ~156-170 s
+  versus ~195-224 s at 1024×1024 — while also looking better. With
+  `offload_to_cpu` the weights live in host RAM and stream to the GPU per layer,
+  so 8-bit weights dequantise more cheaply and the transfer budget is not the
+  bottleneck. Measured peaks at 1024×1024 (7800 MiB usable):
+
+  | MOSS denoiser | File | Peak VRAM | Time |
+  | --- | --- | --- | --- |
+  | `Q5_K_M` | 4.11 GB | 4774 MiB | 195-224 s |
+  | `UD-Q6_K_XL` | 4.53 GB | 5148 MiB | 199 s |
+  | `Q8_0` (shipped) | 5.48 GB | 6130 MiB | 156-171 s |
+  | `BF16` | 10.17 GB | 7148 MiB | 541 s |
+
+  Do not "optimise" this down to a smaller quant on the assumption that smaller
+  is faster; it is not, on this engine and this GPU. The reason to go smaller is
+  VRAM headroom for other work (Q6 leaves ~2.6 GB, Q8 ~1.7 GB) or host RAM.
 
 ### Adding a model
 
@@ -801,7 +818,7 @@ column headings and three captions — at 1024×1024, seed 42, on this machine:
 | `qwen-image-2.1` | 462 s | every string spelled exactly |
 | `z-image-turbo` | 34 s warm, 39 s from cold | title and headings exact, but at least one caption garbled in **3 of 3 seeds** (`aromnatic`, `concnetrhaiio`) |
 | `flux-3-image-klein` | 66 s | every string spelled exactly; layout left the bottom half empty and the three icons were interchangeable vessels rather than a dripper, press and cup |
-| `moss-image` | 179 s | every string spelled exactly, correct icons, composition fills the frame — the strongest of the five, at the highest cost |
+| `moss-image` | 156 s | every string spelled exactly, correct icons, composition fills the frame — the strongest of the five, at the highest cost |
 
 The practical split: **Qwen Turbo is the text-heavy default** — it costs about 20 s
 more than Z-Image and it spells, at the same 8 steps. Flux3 Klein matched Qwen
@@ -810,7 +827,7 @@ quality ceiling (letter-exact *and* right icons) but takes 3× longer than Turbo
 for it. Z-Image earns its place as the fast sketcher: its sparse poster
 compositions are strong, it loads and runs ~40% faster, and it is Apache-2.0
 alongside MOSS. Treat it as the layout comp and Qwen as the final render. This was
-measured at `Q4_K` for the older denoisers (the two new models at `Q5_K_M`); the
+measured at `Q4_K` for the Qwen/Z-Image denoisers and `Q5_K_M`/`Q8_0` for flux3/MOSS; the
 `Q8_0` Denoiser is 2.7 GB larger and was not tested, so quantization may be part
 of the lettering gap.
 
@@ -830,7 +847,7 @@ Z-Image — treat their rows as indicative, not settled.
 | flux3 generation, 16 steps, 1024×1024 (CUDA) | ~58 s cool, ~63-71 s once the card reaches 82 °C |
 | flux3 generation, 16 steps, 512×512 (Vulkan1) | ~52 s cold, ~19 s warm |
 | flux3 edit, 512×512 (CUDA) | ~32 s |
-| MOSS generation, 20 steps, 1024×1024 (CUDA) | ~202 s cold, ~221 s including the model swap |
+| MOSS generation, 20 steps, 1024×1024 (CUDA, Q8_0) | ~156-170 s |
 | MOSS generation, 20 steps, 512×512 (Vulkan1) | ~67 s cold, ~63 s |
 | Qwen Turbo edit, 512×512 (CUDA) | ~25 s |
 

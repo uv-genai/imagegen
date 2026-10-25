@@ -57,8 +57,15 @@ DOWNLOADS=(
   # because black-forest-labs/FLUX.1-schnell is gated (needs a logged-in token).
   "Comfy-Org/z_image_turbo main split_files/vae/ae.safetensors"
   # MOSS-Image SFT denoiser (5B, instruction-tuned; Base is the raw counterpart),
-  # GGUF quantization by realrebelai. Apache-2.0.
-  "realrebelai/MOSS-Image_GGUFs main MOSS-Image-SFT-Q5_K_M.gguf"
+  # GGUF quantization by unsloth. Apache-2.0.
+  #
+  # Q8_0 rather than a 4-bit build: measured on an 8GB card at 1024x1024, Q8 is
+  # both faster (~160 s vs ~220 s) and better than Q5_K_M, because 8-bit weights
+  # dequantize more cheaply. With --offload-to-cpu the weights live in RAM
+  # anyway, so this only needs ~6.1 GB of VRAM at 1 MP. Lighter alternatives,
+  # if host RAM or VRAM headroom is ever a problem:
+  #   unsloth MOSS-Image-SFT-UD-Q6_K_XL 4.53 GB · Q4_K_M 3.20 GB
+  "unsloth/MOSS-Image-SFT-GGUF main MOSS-Image-SFT-Q8_0.gguf"
   # MOSS-Image text encoder: Qwen3.5-9B. Q4_K_M matches the upstream
   # docs/moss_image.md example; Q5_K_M exists but adds 0.9 GB for no measured gain.
   "unsloth/Qwen3.5-9B-GGUF main Qwen3.5-9B-Q4_K_M.gguf"
@@ -88,7 +95,7 @@ declare -A EXPECTED_BYTES=(
   [z_image_turbo-Q4_K.gguf]=3864250304
   [Qwen3-4B-Instruct-2507-Q4_K_M.gguf]=2497281120
   [ae.safetensors]=335304388
-  [MOSS-Image-SFT-Q5_K_M.gguf]=4114968896
+  [MOSS-Image-SFT-Q8_0.gguf]=5482213536
   [Qwen3.5-9B-Q4_K_M.gguf]=5680522464
   [tokenizer.json]=19989325
   [flux-3-image-klein-Q5_K_M.gguf]=4216230816

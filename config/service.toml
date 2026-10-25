@@ -187,11 +187,11 @@ negative_prompt = ""
 
 [[models]]
 id = "moss-image"
-description = "MOSS-Image SFT, 5B DiT at 20 steps CFG 3. Apache-2.0 weights. Strong prompt adherence and coherent typography; Qwen3.5 9B text encoder means slow prompt encoding on this card. Text encoder Q4_K_M follows the upstream docs example; the diffusion model is Q5_K_M."
+description = "MOSS-Image SFT, 5B DiT at 20 steps CFG 3. Apache-2.0 weights. Strong prompt adherence and coherent typography; Qwen3.5 9B text encoder means slow prompt encoding on this card. Denoiser is unsloth's Q8_0: measured faster than Q5_K_M on this card (~160 s vs ~220 s at 1024x1024) and better, needing ~6.1 GB of VRAM. Text encoder Q4_K_M follows the upstream docs example."
 # MOSS uses the FLUX.2 VAE (mirrored ungated by Comfy-Org; BFL is gated) and
 # Qwen3.5-9B, whose vocabulary is not embedded in sd.cpp -- hence the external
 # tokenizer.json (20 MB, OpenMOSS-Team/MOSS-Image-Base).
-diffusion_model = "MOSS-Image-SFT-Q5_K_M.gguf"
+diffusion_model = "MOSS-Image-SFT-Q8_0.gguf"
 vae = "flux2-vae.safetensors"
 text_encoder = "Qwen3.5-9B-Q4_K_M.gguf"
 tokenizer = "tokenizer.json"
