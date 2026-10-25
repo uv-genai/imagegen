@@ -5,8 +5,10 @@ Guidance for agents working on this repository.
 ## What this is
 
 An OpenAI-compatible HTTP gateway in front of `sd-server` (stable-diffusion.cpp)
-serving Qwen-Image-2.1 and Qwen-Image-2.1-Turbo. **The gateway performs no
-inference.** All sampling happens in supervised `sd-server` child processes.
+serving the model registry in `config/service.toml` — as shipped, Qwen-Image-2.1
+base and Turbo, Z-Image-Turbo, MOSS-Image SFT and FLUX.3 Image Klein. **The
+gateway performs no inference.** All sampling happens in supervised `sd-server`
+child processes.
 
 Read `docs/architecture.md` before changing request handling — it defines the
 translation contract and the backend lifecycle.
@@ -127,6 +129,12 @@ There is no configured linter or formatter; keep to the style already present
    but it garbled at least one caption in 3 of 3 seeds while both Qwen models were
    letter-exact — so do not promote it to "the design model" on the strength of its
    marketing. Its reason for being here is Apache-2.0 and speed.
+8. **`cuda` builds into `build/` while `vulkan` and `cpu` build into
+   `build-<backend>`.** The asymmetry is intentional: shipped configs reference
+   `build/bin/sd-server`, so renaming it would break every existing install for a
+   cosmetic win. Engines coexist because each backend has its own directory, and
+   the script refuses to reconfigure one whose CMake cache names a different
+   backend — that is how a working engine gets silently replaced.
 9. **The Docker runtime image installs `libegl1`, which looks unnecessary and is
    not.** The NVIDIA Vulkan ICD `dlopen`s `libEGL.so.1` at runtime, so it is not a
    `NEEDED` entry and `ldd` will never report it missing. Without it the container
@@ -142,12 +150,6 @@ There is no configured linter or formatter; keep to the style already present
     warns and continues. The real check belongs on the machine that will run it.
     Relatedly, the CUDA stage passes `CUDA_ARCHITECTURES` because `nvcc`'
     `-arch=native` cannot detect a card that is not present.
-8. **`cuda` builds into `build/` while `vulkan` and `cpu` build into
-   `build-<backend>`.** The asymmetry is intentional: shipped configs reference
-   `build/bin/sd-server`, so renaming it would break every existing install for a
-   cosmetic win. Engines coexist because each backend has its own directory, and
-   the script refuses to reconfigure one whose CMake cache names a different
-   backend — that is how a working engine gets silently replaced.
 11. **`imagegen serve` takes only `--config` — there is no `--host` or `--port`.**
     The bind address changes via `IMAGEGEN_HOST` / `IMAGEGEN_PORT`, and the complete
     set of environment overrides is `IMAGEGEN_API_KEYS`, `IMAGEGEN_PORT`,
@@ -167,6 +169,15 @@ There is no configured linter or formatter; keep to the style already present
     156-171 s, BF16 7148 MiB / 541 s. Do not "optimise" the shipped quant down on
     the assumption that smaller is faster. The reason to use a smaller one is
     VRAM headroom (Q8 leaves ~1.7 GB of 7800 usable) or host RAM, not speed.
+14. **Changing `config/container.toml`, `scripts/fetch_models.sh` or
+    `docker/entrypoint.sh` requires a `docker build`, not just a commit.** All three
+    are COPYed into the image at build time, so an image built before a weight
+    change keeps serving the old profile: the gateway then asks for a file that
+    `fetch-models` no longer downloads. This happened in the Q5_K_M -> Q8_0 switch,
+    where the rebuilt-image step was almost skipped because the docs had been
+    updated. Rebuilds are cheap once the engine layers are cached (~23 s). Treat
+    "did the image get rebuilt?" as part of the definition of done for those three
+    files.
 
 ## Verifying changes
 
