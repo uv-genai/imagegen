@@ -821,7 +821,8 @@ column headings and three captions — at 1024×1024, seed 42, on this machine:
 | `qwen-image-2.1` | 462 s | every string spelled exactly |
 | `z-image-turbo` | 34 s warm, 39 s from cold | title and headings exact, but at least one caption garbled in **3 of 3 seeds** (`aromnatic`, `concnetrhaiio`) |
 | `flux-3-image-klein` | 66 s | every string spelled exactly; layout left the bottom half empty and the three icons were interchangeable vessels rather than a dripper, press and cup |
-| `moss-image` | 156 s | every string spelled exactly, correct icons, composition fills the frame — the strongest of the five, at the highest cost |
+| `flux-3-image-klein-base` | 134 s | every string spelled exactly in **3 of 3 seeds** — the distilled Klein also scored 7/7 on the same re-specified prompt below. Composition is bottom-light like its sibling: roughly 5% of the ink in the bottom third against 12–18% above, with all three columns populated |
+| `moss-image` | 156 s | every string spelled exactly, correct icons, composition fills the frame — the strongest of the six, at the highest cost |
 
 The practical split: **Qwen Turbo is the text-heavy default** — it costs about 20 s
 more than Z-Image and it spells, at the same 8 steps. Flux3 Klein matched Qwen
@@ -834,8 +835,27 @@ measured at `Q4_K` for the Qwen/Z-Image denoisers and `Q5_K_M`/`Q8_0` for flux3/
 `Q8_0` Denoiser is 2.7 GB larger and was not tested, so quantization may be part
 of the lettering gap.
 
-The two new models have **one run each** of this prompt, versus three seeds for
-Z-Image — treat their rows as indicative, not settled.
+The `flux-3-image-klein` and `moss-image` rows had **one run each** of this prompt,
+versus three seeds for Z-Image — treat them as indicative, not settled.
+
+**Prompt provenance.** The prompt behind those older rows was never recorded, only
+described as "the coffee-infographic prompt", so it could not be reproduced. The
+`flux-3-image-klein-base` row — and the Klein figure quoted beside it — were measured
+against a re-specified prompt, kept here verbatim, with lettering scored by running
+each output through `dots.ocr` and testing for all seven required strings rather than
+by eye:
+
+> `a clean three-column infographic poster about coffee brewing, bold title reading
+> 'BREW BETTER', three column headings reading 'DRIPPER', 'PRESS' and 'POUR', a simple
+> icon above each heading, and three captions reading 'bright and aromatic', 'full and
+> heavy', 'clean and sweet', minimalist layout, high contrast, legible letters`
+
+Do not read the perfect score above as reliable legible text. On a harder stress test —
+sixteen tiny lines of specified words — the same base checkpoint transcribed flawlessly
+in **3 of 9 seeds** and fell into a repetition loop (`abu1a, abu1b, abu1c`) in the other
+six, where the distilled Klein never completed the list at all. Dense small text is a
+coin flip roughly one attempt in three; retry with a new seed, or overlay real text
+afterward if correctness must be guaranteed.
 
 ## Behaviour measured on an RTX 2070 (8 GB, CPU offload, 512×512 unless noted)
 
