@@ -38,6 +38,8 @@ uv run imagegen plan --model qwen-image-2.1-turbo
 scripts/build_engine.sh cuda              # build third_party engine at the pinned commit
 scripts/fetch_models.sh                   # download weights (~33.1 GB, resumable)
 scripts/fetch_models.sh --dry-run         # list them without writing bytes
+scripts/serve.sh --api-key-env IMAGEGEN_API_KEYS --port 8096   # bind 0.0.0.0
+scripts/serve.sh --dry-run                # resolved settings; starts nothing
 third_party/stable-diffusion.cpp/build/bin/sd-server --version   # confirm the pin
 ```
 

@@ -218,6 +218,17 @@ host = "0.0.0.0"
 flags. The complete set of environment overrides is `IMAGEGEN_API_KEYS`,
 `IMAGEGEN_PORT` and `IMAGEGEN_HOST` (`src/imagegen/cli.py`).
 
+`scripts/serve.sh` wraps that for the command line: it takes the key, the port and
+the config path as arguments, exports those same overrides without ever writing
+them to a file, binds `0.0.0.0` unless told otherwise, refuses a public bind with
+no key, and names whoever holds the port before uvicorn gets as far as a traceback.
+
+```bash
+scripts/serve.sh --api-key-env IMAGEGEN_API_KEYS --port 8096
+scripts/serve.sh --api-key "$(openssl rand -hex 24)" --port 8096   # visible in ps
+scripts/serve.sh --dry-run   # resolved settings only; starts nothing
+```
+
 Measured:
 
 ```
