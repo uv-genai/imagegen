@@ -130,7 +130,7 @@ compute devices reported by sd-server:
 CUDA0  NVIDIA GeForce RTX 2070 with Max-Q Design
 CPU    Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
 
-configuration OK: 5 model(s), lifecycle=on_demand
+configuration OK: 6 model(s), lifecycle=on_demand
 ```
 
 ### If something is missing
@@ -425,7 +425,7 @@ Measured on this machine through the gateway after the `0518b34` rebuild:
 | Compose / `flux-3-image-klein` (cold, weights already in page cache) | 15 s |
 
 Both entrypoints log `stable-diffusion.cpp version master-982-0518b34, commit
-0518b34` at start, `GET /v1/models` lists all five models, and an unauthenticated
+0518b34` at start, `GET /v1/models` lists every configured model, and an unauthenticated
 generation request returns 401. Note that only the NVIDIA device is passed into
 the container, so `Vulkan0` there *is* the RTX 2070 — the iGPU-index trap
 described under [Compute backend](#compute-backend) does not apply, which is why
@@ -518,6 +518,7 @@ Configured in `config/service.toml`:
 | `z-image-turbo` | `leejet/Z-Image-Turbo-GGUF` `Q4_K` | 8 steps, CFG 1.0, euler_a |
 | `moss-image` | `unsloth/MOSS-Image-SFT-GGUF` `Q8_0` | 20 steps, CFG 3.0, euler, shift 5 |
 | `flux-3-image-klein` | `unsloth/flux-3-image-klein-GGUF` `Q5_K_M` | 16 steps, CFG 1.0, euler, shift 6.93 |
+| `flux-3-image-klein-base` | `unsloth/flux-3-image-klein-base-GGUF` `Q5_K_M` | 20 steps, CFG 3.5, euler |
 
 Shared by the two Qwen models: VAE `Comfy-Org/Qwen-Image-2.1` →
 `vae/qwen_image_2.1_vae_bf16.safetensors`, text encoder

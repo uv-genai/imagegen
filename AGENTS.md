@@ -6,7 +6,8 @@ Guidance for agents working on this repository.
 
 An OpenAI-compatible HTTP gateway in front of `sd-server` (stable-diffusion.cpp)
 serving the model registry in `config/service.toml` — as shipped, Qwen-Image-2.1
-base and Turbo, Z-Image-Turbo, MOSS-Image SFT and FLUX.3 Image Klein. **The
+base and Turbo, Z-Image-Turbo, MOSS-Image SFT, and FLUX.3 Image Klein distilled and
+Base. **The
 gateway performs no inference.** All sampling happens in supervised `sd-server`
 child processes.
 

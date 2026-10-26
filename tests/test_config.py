@@ -54,6 +54,7 @@ def test_shipped_config_loads_and_registers_every_model() -> None:
         "z-image-turbo",
         "moss-image",
         "flux-3-image-klein",
+        "flux-3-image-klein-base",
     ]
     assert config_dir == SHIPPED_CONFIG.parent
     assert config.backends.sd_server_binary.endswith("sd-server")

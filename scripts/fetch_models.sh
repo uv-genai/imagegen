@@ -75,6 +75,10 @@ DOWNLOADS=(
   # FLUX.3 Image Klein denoiser (4B distilled). GGUF by unsloth; Q5_K_M keeps
   # detail at 4.2 GB, comfortably inside the 8 GB card with the 4B encoder.
   "unsloth/flux-3-image-klein-GGUF main flux-3-image-klein-Q5_K_M.gguf"
+  # FLUX.3 Image Klein BASE: same 4B architecture before distillation, so the file
+  # is the same size and it reuses the Klein text encoder and VAE. Offered as a
+  # separate model because it trades speed for literal prompt adherence.
+  "unsloth/flux-3-image-klein-base-GGUF main flux-3-image-klein-base-Q5_K_M.gguf"
   # FLUX.3 Image Klein text encoder: Qwen3-VL-4B. No mmproj needed: edits use
   # the 'flux2' preset (VLM=No), passing reference images to the DiT via the VAE.
   "Qwen/Qwen3-VL-4B-Instruct-GGUF main Qwen3VL-4B-Instruct-Q4_K_M.gguf"
@@ -99,6 +103,7 @@ declare -A EXPECTED_BYTES=(
   [Qwen3.5-9B-Q4_K_M.gguf]=5680522464
   [tokenizer.json]=19989325
   [flux-3-image-klein-Q5_K_M.gguf]=4216230816
+  [flux-3-image-klein-base-Q5_K_M.gguf]=4195783424
   [Qwen3VL-4B-Instruct-Q4_K_M.gguf]=2497281664
   [flux2-vae.safetensors]=336211292
 )
