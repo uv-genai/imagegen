@@ -932,12 +932,14 @@ scripts rather than redistributed here:
 - **The MOSS-Image weights** (`scripts/fetch_models.sh`) — **Apache-2.0** for the
   SFT denoiser, the Qwen3.5-9B text encoder and the FLUX.2 VAE mirror, per the
   license metadata of all three repositories. Alongside Z-Image this makes two of
-  the five served models usable commercially.
-- **The FLUX.3 Image Klein weights** (`scripts/fetch_models.sh`) — **FLUX
-  Kommunity License v1.0**: non-commercial use for anyone, *plus* commercial use
-  for a "Qualifying User" (affiliates under US$5M annualized revenue). Read it
-  (`LICENSE.md` in `unsloth/flux-3-image-klein-GGUF`) before shipping output
-  commercially above that threshold. The Qwen3-VL-4B text encoder is Apache-2.0.
+  the six served models usable commercially.
+- **The FLUX.3 Image Klein weights, distilled and base** (`scripts/fetch_models.sh`)
+  — **FLUX Kommunity License v1.0**: non-commercial use for anyone, *plus* commercial
+  use for a "Qualifying User" (affiliates under US$5M annualized revenue). Both GGUF
+  repositories report the same `license: other` metadata, so the terms are identical;
+  read `LICENSE.md` in `unsloth/flux-3-image-klein-GGUF` and
+  `unsloth/flux-3-image-klein-base-GGUF` before shipping output commercially above
+  that threshold. The Qwen3-VL-4B text encoder is Apache-2.0.
 
 MIT covers this repository's code; it does not relicense the weights, and running
 the service with them commercially still requires the Qwen commercial license.

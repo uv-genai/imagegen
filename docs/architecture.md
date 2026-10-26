@@ -9,7 +9,7 @@ why they are shaped the way they are.
 `imagegen` exposes an **OpenAI-compatible image API** in front of
 [`stable-diffusion.cpp`](https://github.com/leejet/stable-diffusion.cpp), which runs
 the configured model registry (Qwen-Image-2.1 base and Turbo, Z-Image-Turbo,
-MOSS-Image SFT and FLUX.3 Image Klein as shipped). It is a gateway plus a process
+MOSS-Image SFT, and FLUX.3 Image Klein distilled and Base as shipped). It is a gateway plus a process
 supervisor, not an inference engine: all sampling happens inside `sd-server` child
 processes.
 
@@ -43,9 +43,9 @@ processes.
                      single GPU, at most max_resident_backends loaded
 ```
 
-One `sd-server` process is started per model in `config/service.toml` — three as
-shipped: the two Qwen variants and Z-Image-Turbo — and at most
-`max_resident_backends` of them hold weights at once. They listen on loopback only
+One `sd-server` process is started per model in `config/service.toml`, brought up on
+demand under the shipped `lifecycle`, and at most `max_resident_backends` of them hold
+weights at once. They listen on loopback only
 and carry **no credentials**: the gateway is the sole authentication boundary, so
 exposing a backend port directly would be a security bug.
 
