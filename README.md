@@ -481,14 +481,14 @@ duplicated, so a model change belongs in both.
 | `start_timeout_seconds` | `600` | how long to wait for a backend to report ready — loading is gigabytes |
 | `stop_timeout_seconds` | `30` | grace period for a clean backend shutdown before it is killed |
 | `offload_to_cpu` | `true` | pass `--offload-to-cpu`, keeping part of the weights in system RAM |
-| `diffusion_flash_attention` | `true` | pass `--diffusion-fa` |
+| `diffusion_flash_attention` | `true` | pass `--flash-attn off,diffusion=on` (sd.cpp deprecated `--diffusion-fa`; this assignment is its exact equivalent and leaves `te`/`vae` to decide on their own) |
 | `max_vram_gib` | `null` | per-device budget handed to `--max-vram`. Leave unset to let the engine auto-fit; set it when other processes share the GPU |
 | `log_level` | `"info"` | `debug` \| `verbose` \| `info` \| `warn` \| `error` |
 | `extra_args` | `[]` | appended **verbatim to every** `sd-server` command line — never use it for a per-model flag, which needs a `ModelProfile` field |
 
 ### `[[models]]` and `[models.sampling]`
 
-Covered by [Adding a model](#adding-a-model), which lists all 15 model keys and
+Covered by [Adding a model](#adding-a-model), which lists all 16 model keys and
 all 7 sampling keys with required/optional status and defaults. The same list is
 repeated in the banner above `[[models]]` in `config/service.toml`.
 
@@ -594,6 +594,7 @@ unsupported key is a startup error naming that key, never a silent no-op.
 | `vision_encoder` | no | none | mmproj tower; only VLM-based edit presets (qwen) need it |
 | `tokenizer` | no | none | External `tokenizer.json` when the vocabulary is not embedded in sd.cpp (MOSS/Qwen3.5) |
 | `supports_editing` | no | `false` | Offers `/v1/images/edits`; the tower is passed as `--llm_vision` only when `vision_encoder` is also set |
+| `vae_tiling` | no | `false` | pass `--vae-tiling`, for models whose reference-image VAE encode at `max_pixels` exceeds the VRAM an 8 GB card can spare |
 | `layout` | no | none | Structured-layout dialect this checkpoint parses inside the prompt (e.g. `moss`); advertised in `GET /v1/models` |
 | `dimension_multiple` | no | `32` | Width and height must be multiples of it |
 | `max_images_per_request` | no | `1` | 1..8 |
@@ -614,8 +615,9 @@ something talks to `sd-server` directly:
 
 `id`, `description`, `default_size`, `max_pixels` and `dimension_multiple` are
 gateway-side policy: they validate requests and never reach the command line.
-`supports_editing` is the exception that does change the process — the vision tower
-is passed as `--llm_vision` only when it is true *and* `vision_encoder` is set.
+`supports_editing` and `vae_tiling` are the exceptions that do change the process — the
+vision tower is passed as `--llm_vision` only when the former is true *and* `vision_encoder`
+is set, and `--vae-tiling` follows the latter.
 The two are deliberately independent: the `flux2`/`flux3` edit preset routes
 reference images through the VAE, so `flux-3-image-klein` edits with no tower at
 all (verified: an edit request to it succeeds and the output changes).

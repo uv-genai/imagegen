@@ -82,7 +82,15 @@ def build_server_args(
     if settings.offload_to_cpu:
         args.append("--offload-to-cpu")
     if settings.diffusion_flash_attention:
-        args.append("--diffusion-fa")
+        # sd.cpp deprecated --diffusion-fa; this assignment is its exact modern
+        # equivalent, and keeps flash attention scoped to the diffusion module so
+        # the text encoder and VAE still decide independently.
+        args += ["--flash-attn", "off,diffusion=on"]
+    if profile.vae_tiling:
+        # VAE-encoding a full-resolution reference image needs ~2.6 GB of device
+        # memory for activations, which an 8 GB card cannot spare once the weights
+        # are staged. Tiling keeps image editing working at the profile's ceiling.
+        args.append("--vae-tiling")
     if settings.max_vram_gib is not None:
         args += ["--max-vram", str(settings.max_vram_gib)]
     # Seed the backend with this profile's sampling. The gateway sends these values

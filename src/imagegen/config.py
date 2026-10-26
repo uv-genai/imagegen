@@ -70,6 +70,13 @@ class ModelProfile(BaseModel):
     )
     port: int = Field(gt=0, lt=65536, description="Loopback port the sd-server instance binds.")
     supports_editing: bool = False
+    vae_tiling: bool = Field(
+        default=False,
+        description=(
+            "Process the VAE in spatial tiles. Needed by models whose reference-image "
+            "encode at max_pixels exceeds the VRAM an 8 GB card can spare."
+        ),
+    )
     layout: str | None = Field(
         default=None,
         pattern=r"^[a-z0-9][a-z0-9._-]*$",
