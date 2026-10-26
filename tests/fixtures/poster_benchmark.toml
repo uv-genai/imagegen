@@ -1,0 +1,32 @@
+# Machine-readable recipe for the poster benchmark quoted in README.md.
+#
+# The README's model table rests on this prompt, so it is pinned here as data rather
+# than left as prose that can quietly drift. tests/test_benchmark_fixture.py fails if
+# the two ever disagree, and checks that every scored string is actually requested.
+
+name = "poster-lettering"
+
+#: Generation size used for every row of the table.
+width = 1024
+height = 1024
+
+#: Lettering is scored by OCR substring containment, never by eye.
+scoring = "run each output through dots.ocr and test for every required string"
+
+#: The prompt, kept verbatim from the run.
+prompt = """\
+a clean three-column infographic poster about coffee brewing, bold title reading \
+'BREW BETTER', three column headings reading 'DRIPPER', 'PRESS' and 'POUR', a simple \
+icon above each heading, and three captions reading 'bright and aromatic', 'full and \
+heavy', 'clean and sweet', minimalist layout, high contrast, legible letters"""
+
+#: A poster counts as correct only when all of these survive rendering.
+required_strings = [
+  "BREW BETTER",
+  "DRIPPER",
+  "PRESS",
+  "POUR",
+  "bright and aromatic",
+  "full and heavy",
+  "clean and sweet",
+]

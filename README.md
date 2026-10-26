@@ -850,6 +850,10 @@ by eye:
 > icon above each heading, and three captions reading 'bright and aromatic', 'full and
 > heavy', 'clean and sweet', minimalist layout, high contrast, legible letters`
 
+The string above, its seven targets and the scoring rule are also recorded as data in
+`tests/fixtures/poster_benchmark.toml`, which a test holds against this prose so the run
+and the write-up cannot quietly part company.
+
 Do not read the perfect score above as reliable legible text. On a harder stress test —
 sixteen tiny lines of specified words — the same base checkpoint transcribed flawlessly
 in **3 of 9 seeds** and fell into a repetition loop (`abu1a, abu1b, abu1c`) in the other
